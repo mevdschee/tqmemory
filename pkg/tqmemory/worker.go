@@ -150,26 +150,34 @@ func (w *Worker) drainTouchChan() {
 	}
 }
 
-// DirectGet performs a lock-free GET via sync.Map.
+// DirectGet performs a read-locked GET.
 // Returns the value slice directly (caller must not modify it).
 func (w *Worker) DirectGet(key string) ([]byte, uint64, error) {
+	w.mu.RLock()
 	entry, ok := w.index.Get(key)
 	if !ok {
+		w.mu.RUnlock()
 		return nil, 0, ErrKeyNotFound
 	}
 	// Check expiry
 	if entry.Expiry > 0 && entry.Expiry <= time.Now().UnixMilli() {
+		w.mu.RUnlock()
 		return nil, 0, ErrKeyNotFound
 	}
+	// Capture values before releasing lock
+	value := entry.Value
+	cas := entry.Cas
+	keyToTouch := entry.Key
+	w.mu.RUnlock()
 
 	// Queue LRU touch for batched processing (non-blocking)
 	select {
-	case w.touchChan <- entry.Key:
+	case w.touchChan <- keyToTouch:
 	default:
 		// Channel full, skip this touch
 	}
 
-	return entry.Value, entry.Cas, nil
+	return value, cas, nil
 }
 
 func (w *Worker) expireKeys() {

@@ -4,7 +4,6 @@ import (
 	"container/heap"
 	"container/list"
 	"errors"
-	"sync"
 )
 
 // Common errors
@@ -18,10 +17,11 @@ var (
 
 // IndexEntry represents an entry in the index
 type IndexEntry struct {
-	Key    string
-	Value  []byte // Value stored directly in the entry
-	Expiry int64  // Unix timestamp in milliseconds, 0 = no expiry
-	Cas    uint64
+	Key     string
+	Value   []byte // Value stored directly in the entry
+	Expiry  int64  // Unix timestamp in milliseconds, 0 = no expiry
+	Cas     uint64
+	lruElem *list.Element // Direct pointer to LRU element (avoids lruMap lookup)
 }
 
 // ExpiryEntry represents an entry in the expiry heap
@@ -101,39 +101,32 @@ func (h *ExpiryHeap) Remove(key string) {
 }
 
 // Index holds all in-memory data structures.
-// Uses sync.Map for lock-free concurrent reads.
+// Uses regular map - caller must hold appropriate lock (RLock for Get, Lock for writes).
+// LRU list stores *IndexEntry directly, avoiding key duplication.
 type Index struct {
-	data       sync.Map // key → *IndexEntry, thread-safe
-	count      int      // Manual count (updated under worker lock)
+	data       map[string]*IndexEntry // key → *IndexEntry
 	expiryHeap *ExpiryHeap
-	lruList    *list.List               // Doubly linked list for LRU ordering
-	lruMap     map[string]*list.Element // key → list element for O(1) access
+	lruList    *list.List // Stores *IndexEntry directly
 }
 
 func NewIndex() *Index {
 	return &Index{
+		data:       make(map[string]*IndexEntry),
 		expiryHeap: NewExpiryHeap(),
 		lruList:    list.New(),
-		lruMap:     make(map[string]*list.Element),
 	}
 }
 
-// Get retrieves an entry by key - lock-free with sync.Map
+// Get retrieves an entry by key - caller must hold RLock
 func (idx *Index) Get(key string) (*IndexEntry, bool) {
-	val, ok := idx.data.Load(key)
-	if !ok {
-		return nil, false
-	}
-	return val.(*IndexEntry), true
+	entry, ok := idx.data[key]
+	return entry, ok
 }
 
 // Set inserts or updates an entry - caller must hold Lock
 func (idx *Index) Set(entry *IndexEntry) {
-	_, existed := idx.data.Load(entry.Key)
-	idx.data.Store(entry.Key, entry)
-	if !existed {
-		idx.count++
-	}
+	old, existed := idx.data[entry.Key]
+	idx.data[entry.Key] = entry
 
 	// Update expiry heap
 	if entry.Expiry > 0 {
@@ -142,29 +135,31 @@ func (idx *Index) Set(entry *IndexEntry) {
 		idx.expiryHeap.Remove(entry.Key)
 	}
 
-	// Update LRU list - move to back (most recently used)
-	if elem, ok := idx.lruMap[entry.Key]; ok {
-		idx.lruList.MoveToBack(elem)
+	// Update LRU list
+	if existed && old.lruElem != nil {
+		// Reuse existing element, just update the pointer
+		old.lruElem.Value = entry
+		entry.lruElem = old.lruElem
+		idx.lruList.MoveToBack(entry.lruElem)
 	} else {
-		elem := idx.lruList.PushBack(entry.Key)
-		idx.lruMap[entry.Key] = elem
+		// New entry - add to LRU list
+		entry.lruElem = idx.lruList.PushBack(entry)
 	}
 }
 
 // Delete removes an entry by key - caller must hold Lock
 func (idx *Index) Delete(key string) *IndexEntry {
-	val, loaded := idx.data.LoadAndDelete(key)
-	if !loaded {
+	entry, ok := idx.data[key]
+	if !ok {
 		return nil
 	}
-	idx.count--
-	entry := val.(*IndexEntry)
+	delete(idx.data, key)
 	idx.expiryHeap.Remove(key)
 
-	// Remove from LRU list
-	if elem, ok := idx.lruMap[key]; ok {
-		idx.lruList.Remove(elem)
-		delete(idx.lruMap, key)
+	// Remove from LRU list using direct pointer
+	if entry.lruElem != nil {
+		idx.lruList.Remove(entry.lruElem)
+		entry.lruElem = nil
 	}
 
 	return entry
@@ -172,8 +167,9 @@ func (idx *Index) Delete(key string) *IndexEntry {
 
 // Touch moves a key to the end of the LRU list (most recently used)
 func (idx *Index) Touch(key string) {
-	if elem, ok := idx.lruMap[key]; ok {
-		idx.lruList.MoveToBack(elem)
+	entry, ok := idx.data[key]
+	if ok && entry.lruElem != nil {
+		idx.lruList.MoveToBack(entry.lruElem)
 	}
 }
 
@@ -183,17 +179,12 @@ func (idx *Index) GetOldest() *IndexEntry {
 	if elem == nil {
 		return nil
 	}
-	key := elem.Value.(string)
-	entry, ok := idx.Get(key)
-	if !ok {
-		return nil
-	}
-	return entry
+	return elem.Value.(*IndexEntry)
 }
 
 // Count returns the number of entries
 func (idx *Index) Count() int {
-	return idx.count
+	return len(idx.data)
 }
 
 // ExpiryHeapRef returns the expiry heap for background expiration
