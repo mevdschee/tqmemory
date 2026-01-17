@@ -24,7 +24,6 @@ var (
 	protocol   = flag.String("protocol", "memc-txt", "Protocol: memc-txt, memc-bin, redis, or package")
 	csvOutput  = flag.Bool("csv", false, "Output results in CSV format")
 	label      = flag.String("label", "Target", "Label for the backend (used in CSV)")
-	mode       = flag.String("mode", "default", "Sync mode label (used in CSV)")
 	clients    = flag.Int("clients", 10, "Number of concurrent clients")
 	requests   = flag.Int("requests", 100000, "Total number of requests")
 	valueSize  = flag.Int("size", 1024, "Value size in bytes")

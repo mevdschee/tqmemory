@@ -26,7 +26,7 @@ cleanup() {
     kill_port 11221
     kill_port 11222
 
-    rm -f max_rss.tmp cpu_start.tmp cpu_time.tmp results.tmp
+    rm -f max_rss.tmp cpu_start.tmp cpu_time.tmp results.tmp time.tmp
     rm -f tqmemory-server benchmark-tool
 }
 trap cleanup EXIT
@@ -148,16 +148,16 @@ run_benchmark() {
     # --- Run Benchmarks ---
 
     # TQMemory Binary Protocol (via Unix socket)
-    echo "Benchmarking TQMemory (socket)..."
+    echo "Benchmarking TQMemory..."
     start_monitor $TQ_PID
-    ./benchmark-tool -host $TQ_SOCKET -protocol memc-bin -label "TQMemory" -mode "memory" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
+    ./benchmark-tool -host $TQ_SOCKET -protocol memc-bin -label "TQMemory" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
     STATS=$(stop_monitor $TQ_PID)
     awk -v stats="$STATS" -v threads="$THREAD_COUNT" '{print threads "," $0 "," stats}' results.tmp >> $OUTPUT
 
     # TQMemory Package (direct calls, no network)
     # Use /usr/bin/time since process ends before we can read /proc stats
     echo "Benchmarking TQMemory (package)..."
-    /usr/bin/time -f "%M %U %S %e" -o time.tmp ./benchmark-tool -protocol package -threads $THREAD_COUNT -memory $MEMORY -label "TQPackage" -mode "memory" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
+    /usr/bin/time -f "%M %U %S %e" -o time.tmp ./benchmark-tool -protocol package -threads $THREAD_COUNT -memory $MEMORY -label "TQMemory (package)" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
     # Parse time output: maxrss(KB) user(s) sys(s) elapsed(s)
     read MAX_KB USER_SEC SYS_SEC ELAPSED_SEC < time.tmp
     MAX_MB=$((MAX_KB / 1024))
@@ -168,7 +168,7 @@ run_benchmark() {
     # Memcached
     echo "Benchmarking Memcached..."
     start_monitor $MEM_PID
-    ./benchmark-tool -host $MEM_SOCKET -protocol memc-bin -label "Memcached" -mode "memory" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
+    ./benchmark-tool -host $MEM_SOCKET -protocol memc-bin -label "Memcached" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
     STATS=$(stop_monitor $MEM_PID)
     awk -v stats="$STATS" -v threads="$MEM_THREADS" '{print threads "," $0 "," stats}' results.tmp >> $OUTPUT
 
@@ -227,10 +227,11 @@ annotate_bars(ax1)
 get_df = df[df['Operation'] == 'GET']
 get_pivot = get_df.pivot(index='Threads', columns='Backend', values='RPS')
 get_pivot.plot(kind='bar', ax=ax2, width=0.8, rot=0, legend=False)
-ax2.set_title('GET Performance by Thread Count (Log Scale)')
+ax2.set_title('GET Performance by Thread Count')
 ax2.set_ylabel('Requests Per Second (RPS)')
 ax2.set_xlabel('Threads')
 ax2.set_yscale('log')
+ax2.set_ylim(top=get_pivot.max().max() * 3)  # Add headroom for annotations
 ax2.grid(axis='y', linestyle='--', alpha=0.7)
 annotate_bars(ax2)
 
@@ -261,42 +262,6 @@ plt.suptitle(f'TQMemory vs Memcached Performance Benchmark\n{bench_keys} keys, {
 plt.tight_layout(rect=[0, 0.03, 1, 0.93])
 plt.savefig('getset_benchmark.png', dpi=150, bbox_inches='tight')
 print("Saved: getset_benchmark.png")
-
-# --- Figure 2: Performance Improvement Percentage ---
-fig2, (ax5, ax6) = plt.subplots(1, 2, figsize=(12, 5))
-
-# Calculate improvement percentages
-threads = set_pivot.index.tolist()
-if 'TQMemory' in set_pivot.columns and 'Memcached' in set_pivot.columns:
-    set_improvement = ((set_pivot['TQMemory'] - set_pivot['Memcached']) / set_pivot['Memcached'] * 100).values
-    get_improvement = ((get_pivot['TQMemory'] - get_pivot['Memcached']) / get_pivot['Memcached'] * 100).values
-    
-    colors = ['green' if x > 0 else 'red' for x in set_improvement]
-    ax5.bar(range(len(threads)), set_improvement, color=colors, tick_label=threads)
-    ax5.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
-    ax5.set_ylim(-100, 100)
-    ax5.set_title('SET Performance: TQMemory vs Memcached')
-    ax5.set_ylabel('Improvement (%)')
-    ax5.set_xlabel('Threads')
-    ax5.grid(axis='y', linestyle='--', alpha=0.7)
-    for i, v in enumerate(set_improvement):
-        ax5.annotate(f'{v:.1f}%', (i, v), ha='center', va='bottom' if v > 0 else 'top', fontsize=9)
-    
-    colors = ['green' if x > 0 else 'red' for x in get_improvement]
-    ax6.bar(range(len(threads)), get_improvement, color=colors, tick_label=threads)
-    ax6.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
-    ax6.set_ylim(-100, 100)
-    ax6.set_title('GET Performance: TQMemory vs Memcached')
-    ax6.set_ylabel('Improvement (%)')
-    ax6.set_xlabel('Threads')
-    ax6.grid(axis='y', linestyle='--', alpha=0.7)
-    for i, v in enumerate(get_improvement):
-        ax6.annotate(f'{v:.1f}%', (i, v), ha='center', va='bottom' if v > 0 else 'top', fontsize=9)
-
-plt.suptitle(f'TQMemory Performance Improvement over Memcached\n{bench_keys} keys, {bench_size} byte values, {bench_memory}MB max memory', fontsize=14)
-plt.tight_layout(rect=[0, 0.03, 1, 0.93])
-plt.savefig('getset_benchmark_improvement.png', dpi=150, bbox_inches='tight')
-print("Saved: getset_benchmark_improvement.png")
 EOF
 }
 
@@ -335,6 +300,5 @@ echo "All benchmarks completed!"
 echo "Generated files:"
 echo "  - getset_benchmark.csv"
 echo "  - getset_benchmark.png"
-echo "  - getset_benchmark_improvement.png"
 echo "============================================="
 echo "Done!"

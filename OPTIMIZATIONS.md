@@ -2,18 +2,9 @@
 
 This document describes the performance optimizations applied to TQMemory to achieve competitive performance with Memcached.
 
-## Summary
-
-**Current Performance** (4-8 threads, 10 clients, 10KB values, Unix sockets):
-
-| Threads | TQMemory (SET/GET) | Memcached (SET/GET) | SET      | GET  |
-|---------|--------------------|---------------------|----------|------|
-| 4       | **238K** / 300K    | 159K / 317K         | **+50%** | -5%  |
-| 8       | **264K** / 264K    | 149K / 307K         | **+77%** | -14% |
-
-TQMemory is optimized for write-heavy workloads with larger values (typical SQL query result caching).
-
 ## Optimization Phases
+
+TQMemory is optimized for write-heavy workloads with larger values (typical SQL query result caching). It is tested with 4-8 threads, 10 clients, 10KB values, Unix sockets.
 
 ### Phase 1: sync.Pool for Response Channels
 
