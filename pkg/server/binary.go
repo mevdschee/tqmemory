@@ -8,9 +8,34 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/mevdschee/tqmemory/pkg/tqmemory"
+)
+
+// Pools for frequently allocated buffers
+var (
+	// Pool for 4-byte extras buffer (used in GET responses)
+	extrasPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 4)
+		},
+	}
+
+	// Pool for small body buffers (up to 1KB - covers most keys)
+	smallBodyPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 1024)
+		},
+	}
+
+	// Pool for medium body buffers (up to 64KB)
+	mediumBodyPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 65536)
+		},
+	}
 )
 
 const (
@@ -90,9 +115,26 @@ func (s *Server) handleBinary(conn net.Conn, reader *bufio.Reader, writer *bufio
 			CAS:      binary.BigEndian.Uint64(headerBuf[16:24]),
 		}
 
-		bodyBuf := make([]byte, req.BodyLen)
+		// Use pooled body buffer based on size
+		var bodyBuf []byte
+		var poolToReturn *sync.Pool
+		bodyLen := int(req.BodyLen)
+
+		if bodyLen <= 1024 {
+			bodyBuf = smallBodyPool.Get().([]byte)[:bodyLen]
+			poolToReturn = &smallBodyPool
+		} else if bodyLen <= 65536 {
+			bodyBuf = mediumBodyPool.Get().([]byte)[:bodyLen]
+			poolToReturn = &mediumBodyPool
+		} else {
+			bodyBuf = make([]byte, bodyLen)
+		}
+
 		if _, err := io.ReadFull(reader, bodyBuf); err != nil {
 			log.Printf("Binary read body error: %v", err)
+			if poolToReturn != nil {
+				poolToReturn.Put(bodyBuf[:cap(bodyBuf)])
+			}
 			return
 		}
 
@@ -126,6 +168,9 @@ func (s *Server) handleBinary(conn net.Conn, reader *bufio.Reader, writer *bufio
 		case opVersion:
 			s.handleBinaryVersion(writer, req)
 		case opQuit:
+			if poolToReturn != nil {
+				poolToReturn.Put(bodyBuf[:cap(bodyBuf)])
+			}
 			return
 		case opNoop:
 			s.sendBinaryResponse(writer, req, resSuccess, nil, nil, nil, 0)
@@ -144,6 +189,11 @@ func (s *Server) handleBinary(conn net.Conn, reader *bufio.Reader, writer *bufio
 		default:
 			log.Printf("Binary Unknown Opcode: 0x%02x", req.Opcode)
 			s.sendBinaryResponse(writer, req, resUnknownCmd, nil, nil, nil, 0)
+		}
+
+		// Return pooled buffer
+		if poolToReturn != nil {
+			poolToReturn.Put(bodyBuf[:cap(bodyBuf)])
 		}
 
 		if reader.Buffered() == 0 {
@@ -214,8 +264,11 @@ func (s *Server) handleBinaryGet(writer *bufio.Writer, req binaryHeader, key str
 		return
 	}
 
-	extras := make([]byte, 4)
+	// Use pooled extras buffer
+	extras := extrasPool.Get().([]byte)
+	extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 0 // Reset flags
 	s.sendBinaryResponse(writer, req, resSuccess, extras, nil, val, cas)
+	extrasPool.Put(extras)
 }
 
 func (s *Server) handleBinaryGetK(writer *bufio.Writer, req binaryHeader, key string, quiet bool) {
@@ -227,8 +280,11 @@ func (s *Server) handleBinaryGetK(writer *bufio.Writer, req binaryHeader, key st
 		s.sendBinaryResponse(writer, req, resKeyNotFound, nil, nil, nil, 0)
 		return
 	}
-	extras := make([]byte, 4)
+	// Use pooled extras buffer
+	extras := extrasPool.Get().([]byte)
+	extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 0
 	s.sendBinaryResponse(writer, req, resSuccess, extras, []byte(key), val, cas)
+	extrasPool.Put(extras)
 }
 
 func (s *Server) handleBinaryDelete(writer *bufio.Writer, req binaryHeader, key string) {

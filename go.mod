@@ -1,6 +1,8 @@
 module github.com/mevdschee/tqmemory
 
-go 1.21
+go 1.24.0
+
+toolchain go1.24.12
 
 require (
 	github.com/bradfitz/gomemcache v0.0.0-20250403215159-8d39553ac7cf

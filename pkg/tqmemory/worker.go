@@ -64,7 +64,7 @@ func NewWorker(defaultTTL time.Duration, channelCapacity int, maxMemory int64) *
 	return &Worker{
 		index:      NewIndex(),
 		reqChan:    make(chan *Request, channelCapacity),
-		touchChan:  make(chan string, 10000), // Buffer for batched LRU touches
+		touchChan:  make(chan string, 10000),
 		stopChan:   make(chan struct{}),
 		casCounter: uint64(time.Now().UnixNano()),
 		DefaultTTL: defaultTTL,

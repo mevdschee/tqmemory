@@ -234,8 +234,44 @@ Key deduplication saves ~68 bytes per entry:
 
 ---
 
+## Unix Socket Support
+
+The server supports Unix sockets for lower-latency local connections:
+```bash
+./tqmemory -s /tmp/tqmemory.sock -m 1024
+```
+
+---
+
+## Attempted Optimizations (Not Used)
+
+### CPU Affinity / NUMA Pinning
+Tested pinning worker goroutines to specific CPU cores using `sched_setaffinity`. This **reduced performance** because:
+- Go's scheduler is designed to balance work efficiently across threads
+- Pinning prevents the scheduler from using idle CPUs when I/O waiting
+- For cache workloads with mixed read/write, flexibility is more important than locality
+
+### io_uring
+Tested using the Gain framework for io_uring networking. Results:
+- Small values (100 bytes): ~37K RPS - similar to standard
+- Large values (10KB+): Stalls due to buffering issues in Gain framework
+- Standard Go networking is already highly optimized for this workload
+
+---
+
+## Memory Pooling (Implemented)
+
+Uses `sync.Pool` to reduce allocations in the hot path:
+
+**Pooled buffers:**
+- **Extras buffer pool**: 4-byte buffers for GET response flags
+- **Small body pool**: Up to 1KB (covers most key-only requests like GET)
+- **Medium body pool**: Up to 64KB (covers most SET operations)
+
+Requests larger than 64KB still allocate fresh buffers.
+
+---
+
 ## Future Optimization Opportunities
 
-1. **io_uring**: Use Linux io_uring for more efficient network I/O
-2. **Memory pooling**: Pool frequently allocated objects (requests, responses)
-3. **NUMA awareness**: Bind workers to specific CPU cores for better cache locality
+1. **Zero-copy writes**: Use `net.Buffers` (writev) for large value responses
