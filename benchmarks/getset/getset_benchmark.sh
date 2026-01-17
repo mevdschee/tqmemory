@@ -130,12 +130,12 @@ run_benchmark() {
 
     # --- Start TQMemory ---
     echo "Starting TQMemory (Threads: $THREAD_COUNT)..."
-    ./tqmemory-server -p 11221 -t $THREAD_COUNT -m 2048 > /dev/null 2>&1 &
+    ./tqmemory-server -p 11221 -t $THREAD_COUNT -m 64 > /dev/null 2>&1 &
     TQ_PID=$!
 
     # --- Start Memcached ---
     echo "Starting Memcached (Threads: $MEM_THREADS)..."
-    memcached -p 11222 -m 2048 -t $MEM_THREADS -u $(whoami) -c 100000 > /dev/null 2>&1 &
+    memcached -p 11222 -m 64 -t $MEM_THREADS -u $(whoami) -c 100000 > /dev/null 2>&1 &
     MEM_PID=$!
 
     # Wait for startup
