@@ -262,6 +262,7 @@ if 'TQMemory' in set_pivot.columns and 'Memcached' in set_pivot.columns:
     colors = ['green' if x > 0 else 'red' for x in set_improvement]
     ax5.bar(range(len(threads)), set_improvement, color=colors, tick_label=threads)
     ax5.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+    ax5.set_ylim(-100, 100)
     ax5.set_title('SET Performance: TQMemory vs Memcached')
     ax5.set_ylabel('Improvement (%)')
     ax5.set_xlabel('Threads')
@@ -272,6 +273,7 @@ if 'TQMemory' in set_pivot.columns and 'Memcached' in set_pivot.columns:
     colors = ['green' if x > 0 else 'red' for x in get_improvement]
     ax6.bar(range(len(threads)), get_improvement, color=colors, tick_label=threads)
     ax6.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+    ax6.set_ylim(-100, 100)
     ax6.set_title('GET Performance: TQMemory vs Memcached')
     ax6.set_ylabel('Improvement (%)')
     ax6.set_xlabel('Threads')
@@ -279,7 +281,7 @@ if 'TQMemory' in set_pivot.columns and 'Memcached' in set_pivot.columns:
     for i, v in enumerate(get_improvement):
         ax6.annotate(f'{v:.1f}%', (i, v), ha='center', va='bottom' if v > 0 else 'top', fontsize=9)
 
-plt.suptitle('TQMemory Performance Improvement over Memcached', fontsize=14)
+plt.suptitle(f'TQMemory Performance Improvement over Memcached\n{bench_keys} keys, {bench_size} byte values, {bench_memory}MB max memory', fontsize=14)
 plt.tight_layout(rect=[0, 0.03, 1, 0.93])
 plt.savefig('getset_benchmark_improvement.png', dpi=150, bbox_inches='tight')
 print("Saved: getset_benchmark_improvement.png")
