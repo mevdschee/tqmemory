@@ -77,8 +77,8 @@ tqmemory -config /etc/tqmemory.conf
 
 | Operation | TQMemory     | Memcached    | Difference |
 | --------- | ------------ | ------------ | ---------- |
-| **SET**   | 145,411 RPS  | 127,208 RPS  | **+14%**   |
-| **GET**   | 248,855 RPS  | 260,524 RPS  | **-4%**    |
+| **SET**   | 142,220 RPS  | 121,106 RPS  | **+17%**   |
+| **GET**   | 249,682 RPS  | 239,313 RPS  | **+4%**    |
 
 ### Benchmark Chart
 
