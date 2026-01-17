@@ -4,11 +4,14 @@ This document describes the performance optimizations applied to TQMemory to ach
 
 ## Summary
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| GET (single client) | 45,358 RPS | 53,125 RPS | **+17%** |
-| GET (10 clients) | 326,000 RPS | 365,000 RPS | **+12%** |
-| Gap vs Memcached | -16% | -1.6% | **+14 points** |
+**Current Performance** (4 threads, 10 clients, 10KB values):
+
+| Metric | TQMemory | Memcached | Difference |
+|--------|----------|-----------|------------|
+| SET | 149,000 RPS | 127,000 RPS | **+17%** |
+| GET | 270,000 RPS | 282,000 RPS | **-4%** |
+
+TQMemory is optimized for write-heavy workloads with larger values (typical SQL query result caching).
 
 ## Optimization Phases
 

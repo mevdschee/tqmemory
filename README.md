@@ -71,23 +71,14 @@ tqmemory -l 127.0.0.1
 tqmemory -config /etc/tqmemory.conf
 ```
 
-## PHP Configuration
-
-Configure PHP to use TQMemory as a session handler:
-
-```ini
-session.save_handler = memcached
-session.save_path = "localhost:11211"
-```
-
 ## Performance
 
-**TQMemory vs Memcached** (4 threads, 100K keys, 10KB values)
+**TQMemory vs Memcached** (4 threads, 10 clients, 10KB values)
 
 | Operation | TQMemory     | Memcached    | Difference |
 | --------- | ------------ | ------------ | ---------- |
-| **SET**   | 156,029 RPS  | 129,919 RPS  | **+20%**   |
-| **GET**   | 281,623 RPS  | 281,072 RPS  | **+0%**    |
+| **SET**   | 145,411 RPS  | 127,208 RPS  | **+14%**   |
+| **GET**   | 248,855 RPS  | 260,524 RPS  | **-4%**    |
 
 ### Benchmark Chart
 

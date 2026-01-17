@@ -115,9 +115,9 @@ func (w *Worker) Close() error {
 func (w *Worker) run() {
 	defer w.wg.Done()
 
-	// Background expiration ticker
-	expiryTicker := time.NewTicker(100 * time.Millisecond)
-	defer expiryTicker.Stop()
+	// Background ticker for maintenance tasks
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -126,8 +126,8 @@ func (w *Worker) run() {
 			w.mu.Lock()
 			w.handleRequest(req)
 			w.mu.Unlock()
-		case <-expiryTicker.C:
-			// Batch process LRU touches and expire keys every 100ms
+		case <-ticker.C:
+			// Batch process: LRU touches and expiry
 			w.mu.Lock()
 			w.drainTouchChan()
 			w.expireKeys()
@@ -150,10 +150,9 @@ func (w *Worker) drainTouchChan() {
 	}
 }
 
-// DirectGet performs a lock-free GET.
+// DirectGet performs a lock-free GET via sync.Map.
 // Returns the value slice directly (caller must not modify it).
 func (w *Worker) DirectGet(key string) ([]byte, uint64, error) {
-	// Direct map access via sync.Map
 	entry, ok := w.index.Get(key)
 	if !ok {
 		return nil, 0, ErrKeyNotFound
@@ -188,16 +187,14 @@ func (w *Worker) expireKeys() {
 	}
 }
 
-// evictLRU evicts the least recently used items until we're under maxMemory
+// evictLRU evicts the least recently used items until we have enough space
 func (w *Worker) evictLRU(needed int64) {
 	if w.maxMemory == 0 {
 		return // No limit
 	}
 
-	// Evict items from expiry heap (oldest first) until we have enough space
-	// This is a simple approximation of LRU using expiry time
+	// Evict items until we have enough space
 	for w.usedMemory+needed > w.maxMemory {
-		// Get the oldest item (lowest expiry or oldest insertion for non-expiring items)
 		oldest := w.index.GetOldest()
 		if oldest == nil {
 			break // No more items to evict
@@ -317,7 +314,7 @@ func (w *Worker) doSet(key string, value []byte, ttl time.Duration, existingCas 
 		oldSize = int64(len(existing.Key) + len(existing.Value))
 	}
 
-	// Evict if needed (only for new memory, not replacements)
+	// Evict if needed before storing
 	additionalMemory := entrySize - oldSize
 	if additionalMemory > 0 && w.maxMemory > 0 {
 		w.evictLRU(additionalMemory)
@@ -448,7 +445,7 @@ func (w *Worker) doAppendPrepend(key string, value []byte, prepend bool) *Respon
 	// Calculate new memory needed
 	additionalMemory := int64(len(value))
 
-	// Evict if needed
+	// Evict if needed before storing
 	if w.maxMemory > 0 && additionalMemory > 0 {
 		w.evictLRU(additionalMemory)
 	}

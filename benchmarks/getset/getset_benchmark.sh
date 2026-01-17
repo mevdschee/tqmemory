@@ -45,8 +45,9 @@ go build -o benchmark-tool .
 # Benchmark Configuration
 CLIENTS=10
 REQUESTS=100000
-SIZE=10240
+SIZE=10240   # 10KB - typical SQL query result size
 KEYS=100000
+MEMORY=2048  # Max memory in MB
 
 # Get CPU time (user + system) from /proc/PID/stat in jiffies
 get_cpu_time() {
@@ -130,12 +131,12 @@ run_benchmark() {
 
     # --- Start TQMemory ---
     echo "Starting TQMemory (Threads: $THREAD_COUNT)..."
-    ./tqmemory-server -p 11221 -t $THREAD_COUNT -m 64 > /dev/null 2>&1 &
+    ./tqmemory-server -p 11221 -t $THREAD_COUNT -m $MEMORY > /dev/null 2>&1 &
     TQ_PID=$!
 
     # --- Start Memcached ---
     echo "Starting Memcached (Threads: $MEM_THREADS)..."
-    memcached -p 11222 -m 64 -t $MEM_THREADS -u $(whoami) -c 100000 > /dev/null 2>&1 &
+    memcached -p 11222 -m $MEMORY -t $MEM_THREADS -u $(whoami) -c 100000 > /dev/null 2>&1 &
     MEM_PID=$!
 
     # Wait for startup
@@ -165,10 +166,19 @@ run_benchmark() {
 }
 
 generate_visualization() {
+export BENCH_KEYS=$KEYS
+export BENCH_SIZE=$SIZE
+export BENCH_MEMORY=$MEMORY
 python3 << 'EOF'
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+
+# Get benchmark parameters from environment
+bench_keys = os.environ.get('BENCH_KEYS', '100000')
+bench_size = os.environ.get('BENCH_SIZE', '10240')
+bench_memory = os.environ.get('BENCH_MEMORY', '2048')
 
 def annotate_bars(ax):
     for p in ax.patches:
@@ -232,8 +242,8 @@ for ax in (ax1, ax2, ax3, ax4):
     ylim = ax.get_ylim()
     ax.set_ylim(0, ylim[1] * 1.15)
 
-plt.suptitle('TQMemory vs Memcached Performance Benchmark', fontsize=16)
-plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.suptitle(f'TQMemory vs Memcached Performance Benchmark\n{bench_keys} keys, {bench_size} byte values, {bench_memory}MB max memory', fontsize=14)
+plt.tight_layout(rect=[0, 0.03, 1, 0.93])
 plt.savefig('getset_benchmark.png', dpi=150, bbox_inches='tight')
 print("Saved: getset_benchmark.png")
 

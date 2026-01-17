@@ -101,10 +101,10 @@ func (h *ExpiryHeap) Remove(key string) {
 }
 
 // Index holds all in-memory data structures.
-// Uses sync.Map for thread-safe concurrent read/write access.
+// Uses sync.Map for lock-free concurrent reads.
 type Index struct {
 	data       sync.Map // key → *IndexEntry, thread-safe
-	count      int      // Manual count
+	count      int      // Manual count (updated under worker lock)
 	expiryHeap *ExpiryHeap
 	lruList    *list.List               // Doubly linked list for LRU ordering
 	lruMap     map[string]*list.Element // key → list element for O(1) access
@@ -127,7 +127,7 @@ func (idx *Index) Get(key string) (*IndexEntry, bool) {
 	return val.(*IndexEntry), true
 }
 
-// Set inserts or updates an entry
+// Set inserts or updates an entry - caller must hold Lock
 func (idx *Index) Set(entry *IndexEntry) {
 	_, existed := idx.data.Load(entry.Key)
 	idx.data.Store(entry.Key, entry)
@@ -151,7 +151,7 @@ func (idx *Index) Set(entry *IndexEntry) {
 	}
 }
 
-// Delete removes an entry by key
+// Delete removes an entry by key - caller must hold Lock
 func (idx *Index) Delete(key string) *IndexEntry {
 	val, loaded := idx.data.LoadAndDelete(key)
 	if !loaded {
