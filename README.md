@@ -87,7 +87,7 @@ session.save_path = "localhost:11211"
 | Operation | TQMemory     | Memcached    | Difference |
 | --------- | ------------ | ------------ | ---------- |
 | **SET**   | 156,029 RPS  | 129,919 RPS  | **+20%**   |
-| **GET**   | 281,623 RPS  | 281,072 RPS  | **~0%**    |
+| **GET**   | 281,623 RPS  | 281,072 RPS  | **0**    |
 
 ### Benchmark Chart
 
