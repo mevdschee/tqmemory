@@ -97,7 +97,7 @@ type Index struct {
 }
 ```
 
-**Result**: Maintained thread safety while enabling concurrent reads without RWMutex overhead.
+**Result**: Better performance than sync.Map for this workload. RWMutex allows concurrent reads while serializing writes through the worker goroutine.
 
 ---
 
