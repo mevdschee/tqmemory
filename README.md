@@ -4,7 +4,7 @@ TQMemory is a high-performance, non-persistent memory cache server. It provides 
 Memcached-compatible interface, making it ideal as a drop-in replacement for
 `memcached`.
 
-Blog post: https://www.tqdev.com/2026-tqmemory-memcache-redis-alternative
+Blog post: https://www.tqdev.com/2026-tqmemory-memcached-alternative
 
 ## Features
 
@@ -87,7 +87,7 @@ session.save_path = "localhost:11211"
 | Operation | TQMemory     | Memcached    | Difference |
 | --------- | ------------ | ------------ | ---------- |
 | **SET**   | 156,029 RPS  | 129,919 RPS  | **+20%**   |
-| **GET**   | 281,623 RPS  | 281,072 RPS  | **=**      |
+| **GET**   | 281,623 RPS  | 281,072 RPS  | **~0%**    |
 
 ### Benchmark Chart
 
