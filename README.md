@@ -75,12 +75,12 @@ tqmemory -config /etc/tqmemory.conf
 
 **TQMemory vs Memcached** (Unix sockets, 10 clients, 10KB values)
 
-| Threads | TQMemory SET | Memcached SET | TQMemory GET | Memcached GET |
-|---------|-------------|---------------|-------------|---------------|
-| 1 | 86K | 112K | 144K | 156K |
-| 2 | 155K | 147K | 249K | 272K |
-| 4 | **238K** | 159K | 300K | 317K |
-| 8 | **264K** | 149K | 264K | 307K |
+| Threads | TQMemory (SET/GET) | Memcached (SET/GET) | SET Δ | GET Δ |
+|---------|-------------------|---------------------|-------|-------|
+| 1 | 86K / 144K | 112K / 156K | -23% | -8% |
+| 2 | 155K / 249K | 147K / 272K | +5% | -8% |
+| 4 | **238K** / 300K | 159K / 317K | **+50%** | -5% |
+| 8 | **264K** / 264K | 149K / 307K | **+77%** | -14% |
 
 **Highlights:**
 - SET operations are **1.5-1.8x faster** than Memcached at 4-8 threads
