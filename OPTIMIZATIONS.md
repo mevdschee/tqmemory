@@ -4,12 +4,12 @@ This document describes the performance optimizations applied to TQMemory to ach
 
 ## Summary
 
-**Current Performance** (4 threads, 10 clients, 64KB values):
+**Current Performance** (4-8 threads, 10 clients, 10KB values, Unix sockets):
 
-| Metric | TQMemory | Memcached | Difference |
-|--------|----------|-----------|------------|
-| SET | 164,000 RPS | 134,000 RPS | **+23%** |
-| GET | 262,000 RPS | 275,000 RPS | **-5%** |
+| Threads | TQMemory (SET/GET) | Memcached (SET/GET) | SET      | GET  |
+|---------|--------------------|---------------------|----------|------|
+| 4       | **238K** / 300K    | 159K / 317K         | **+50%** | -5%  |
+| 8       | **264K** / 264K    | 149K / 307K         | **+77%** | -14% |
 
 TQMemory is optimized for write-heavy workloads with larger values (typical SQL query result caching).
 
@@ -183,29 +183,6 @@ case <-expiryTicker.C:
 ```
 
 **Result**: +3% improvement. Reduced lock contention by batching LRU updates.
-
----
-
-## Profiling Results
-
-### pprof CPU Profile (Before Optimizations)
-
-| Function | CPU % |
-|----------|-------|
-| `runtime.memmove` (value copy) | 15% |
-| `runtime.mallocgc` | 46% |
-| `sync/atomic.Add` (RWMutex) | 25% |
-
-### pprof CPU Profile (After Optimizations)
-
-| Function | CPU % |
-|----------|-------|
-| `runtime.procyield` (sync.Map) | 26% |
-| `runtime.mapaccess2` (sync.Map) | 17% |
-| `workerFor` (inline FNV) | 9% |
-| `sync.Map.Load` | 36% (cumulative) |
-
-The remaining overhead is primarily from sync.Map's internal locking mechanism, which is necessary for thread safety.
 
 ---
 
