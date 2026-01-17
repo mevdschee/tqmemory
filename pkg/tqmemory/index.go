@@ -4,8 +4,7 @@ import (
 	"container/heap"
 	"container/list"
 	"errors"
-
-	"github.com/google/btree"
+	"sync"
 )
 
 // Common errors
@@ -17,17 +16,12 @@ var (
 	ErrCasMismatch   = errors.New("cas mismatch")
 )
 
-// IndexEntry represents an entry in the B-tree index
+// IndexEntry represents an entry in the index
 type IndexEntry struct {
 	Key    string
 	Value  []byte // Value stored directly in the entry
 	Expiry int64  // Unix timestamp in milliseconds, 0 = no expiry
 	Cas    uint64
-}
-
-// Less implements btree.Item
-func (e IndexEntry) Less(than btree.Item) bool {
-	return e.Key < than.(IndexEntry).Key
 }
 
 // ExpiryEntry represents an entry in the expiry heap
@@ -106,9 +100,11 @@ func (h *ExpiryHeap) Remove(key string) {
 	}
 }
 
-// Index holds all in-memory data structures
+// Index holds all in-memory data structures.
+// Uses sync.Map for thread-safe concurrent read/write access.
 type Index struct {
-	btree      *btree.BTree
+	data       sync.Map // key → *IndexEntry, thread-safe
+	count      int      // Manual count
 	expiryHeap *ExpiryHeap
 	lruList    *list.List               // Doubly linked list for LRU ordering
 	lruMap     map[string]*list.Element // key → list element for O(1) access
@@ -116,26 +112,28 @@ type Index struct {
 
 func NewIndex() *Index {
 	return &Index{
-		btree:      btree.New(32), // degree 32 for good performance
 		expiryHeap: NewExpiryHeap(),
 		lruList:    list.New(),
 		lruMap:     make(map[string]*list.Element),
 	}
 }
 
-// Get retrieves an entry by key
+// Get retrieves an entry by key - lock-free with sync.Map
 func (idx *Index) Get(key string) (*IndexEntry, bool) {
-	item := idx.btree.Get(IndexEntry{Key: key})
-	if item == nil {
+	val, ok := idx.data.Load(key)
+	if !ok {
 		return nil, false
 	}
-	entry := item.(IndexEntry)
-	return &entry, true
+	return val.(*IndexEntry), true
 }
 
 // Set inserts or updates an entry
 func (idx *Index) Set(entry *IndexEntry) {
-	idx.btree.ReplaceOrInsert(*entry)
+	_, existed := idx.data.Load(entry.Key)
+	idx.data.Store(entry.Key, entry)
+	if !existed {
+		idx.count++
+	}
 
 	// Update expiry heap
 	if entry.Expiry > 0 {
@@ -155,20 +153,21 @@ func (idx *Index) Set(entry *IndexEntry) {
 
 // Delete removes an entry by key
 func (idx *Index) Delete(key string) *IndexEntry {
-	item := idx.btree.Delete(IndexEntry{Key: key})
-	if item == nil {
+	val, loaded := idx.data.LoadAndDelete(key)
+	if !loaded {
 		return nil
 	}
-	entry := item.(IndexEntry)
-	idx.expiryHeap.Remove(entry.Key)
+	idx.count--
+	entry := val.(*IndexEntry)
+	idx.expiryHeap.Remove(key)
 
 	// Remove from LRU list
-	if elem, ok := idx.lruMap[entry.Key]; ok {
+	if elem, ok := idx.lruMap[key]; ok {
 		idx.lruList.Remove(elem)
-		delete(idx.lruMap, entry.Key)
+		delete(idx.lruMap, key)
 	}
 
-	return &entry
+	return entry
 }
 
 // Touch moves a key to the end of the LRU list (most recently used)
@@ -194,7 +193,7 @@ func (idx *Index) GetOldest() *IndexEntry {
 
 // Count returns the number of entries
 func (idx *Index) Count() int {
-	return idx.btree.Len()
+	return idx.count
 }
 
 // ExpiryHeapRef returns the expiry heap for background expiration

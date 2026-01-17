@@ -9,7 +9,7 @@ Blog post: https://www.tqdev.com/2026-tqmemory-memcache-redis-alternative
 ## Features
 
 - **Memory Cache**: Ideal as a drop-in replacement for `memcached`
-- **Faster than Memcached**: More than 50% faster than Memcached in typical cases
+- **Competitive Performance**: Matches or exceeds Memcached performance
 - **Memcached Compatible**: Supports all Memcached commands, text and binary
 - **Same CLI Flags**: Uses identical command-line options as memcached
 
@@ -82,20 +82,20 @@ session.save_path = "localhost:11211"
 
 ## Performance
 
-**TQMemory vs Memcached**
+**TQMemory vs Memcached** (4 threads, 100K keys, 10KB values)
 
-Benchmarks were run on a local development environment (Linux, Loopback).
-100,000 keys were used for the benchmark, each with a size of 10KB.
+| Operation | TQMemory     | Memcached    | Difference |
+| --------- | ------------ | ------------ | ---------- |
+| **SET**   | 156,029 RPS  | 129,919 RPS  | **+20%**   |
+| **GET**   | 281,623 RPS  | 281,072 RPS  | **=**      |
 
-### Benchmark Results
+### Benchmark Chart
 
 ![Performance Benchmark](benchmarks/getset/getset_benchmark.png)
 
-### Performance Highlights
+Benchmarks were run on a local development environment (Linux, loopback interface).
 
-- **Write (SET)**: Faster than Memcached in typical workloads
-- **Read (GET)**: Faster than Memcached in typical workloads
-- **Memory**: Similar memory usage to Memcached
+See [OPTIMIZATIONS.md](OPTIMIZATIONS.md) for details on performance tuning.
 
 ## Testing
 
@@ -105,7 +105,11 @@ go test ./pkg/tqmemory/...
 
 ## Architecture
 
-TQMemory stores data in memory using a lock-free, worker-based architecture.
-Each worker handles a subset of keys, eliminating lock contention.
+TQMemory uses a sharded, worker-based architecture optimized for high-throughput:
+
+- **Sharded Cache**: Keys are distributed across workers via FNV-1a hash
+- **Direct GET Path**: Read operations use sync.Map for lock-free access
+- **Batched LRU**: LRU updates are processed in batches for efficiency
+- **Memory Management**: Per-worker memory limits with LRU eviction
 
 See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for detailed architecture.

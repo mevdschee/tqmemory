@@ -2,10 +2,15 @@ package tqmemory
 
 import (
 	"fmt"
-	"hash/fnv"
 	"runtime"
+	"sync"
 	"time"
 )
+
+// respChanPool pools response channels to reduce allocation overhead
+var respChanPool = sync.Pool{
+	New: func() any { return make(chan *Response, 1) },
+}
 
 // ShardedCache wraps multiple Worker instances for concurrent access.
 // Keys are distributed across workers using FNV-1a hash.
@@ -52,11 +57,20 @@ func NewSharded(cfg Config, workerCount int) (*ShardedCache, error) {
 	return sc, nil
 }
 
-// workerFor returns the worker index for the given key using FNV-1a hash.
+// workerFor returns the worker index for the given key using inline FNV-1a hash.
+// Inlined to avoid interface allocation from fnv.New32a().
 func (sc *ShardedCache) workerFor(key string) int {
-	h := fnv.New32a()
-	h.Write([]byte(key))
-	return int(h.Sum32()) % len(sc.workers)
+	// FNV-1a hash inlined for performance
+	const (
+		offset32 = uint32(2166136261)
+		prime32  = uint32(16777619)
+	)
+	hash := offset32
+	for i := 0; i < len(key); i++ {
+		hash ^= uint32(key[i])
+		hash *= prime32
+	}
+	return int(hash) % len(sc.workers)
 }
 
 // Close closes all workers.
@@ -72,18 +86,17 @@ func (sc *ShardedCache) Close() error {
 
 // sendRequest sends a request to the appropriate worker and waits for response.
 func (sc *ShardedCache) sendRequest(workerIdx int, req *Request) *Response {
-	req.RespChan = make(chan *Response, 1)
+	respChan := respChanPool.Get().(chan *Response)
+	req.RespChan = respChan
 	sc.workers[workerIdx].RequestChan() <- req
-	return <-req.RespChan
+	resp := <-respChan
+	respChanPool.Put(respChan)
+	return resp
 }
 
-// Get retrieves a value from the cache.
+// Get retrieves a value from the cache using direct read path (no channel overhead).
 func (sc *ShardedCache) Get(key string) ([]byte, uint64, error) {
-	resp := sc.sendRequest(sc.workerFor(key), &Request{
-		Op:  OpGet,
-		Key: key,
-	})
-	return resp.Value, resp.Cas, resp.Err
+	return sc.workers[sc.workerFor(key)].DirectGet(key)
 }
 
 // Set stores a value in the cache.

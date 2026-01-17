@@ -46,8 +46,10 @@ type Response struct {
 
 // Worker is the single-threaded cache worker
 type Worker struct {
+	mu         sync.RWMutex // Protects index for direct reads
 	index      *Index
 	reqChan    chan *Request
+	touchChan  chan string // Buffered channel for batched LRU touches
 	stopChan   chan struct{}
 	wg         sync.WaitGroup
 	casCounter uint64
@@ -62,6 +64,7 @@ func NewWorker(defaultTTL time.Duration, channelCapacity int, maxMemory int64) *
 	return &Worker{
 		index:      NewIndex(),
 		reqChan:    make(chan *Request, channelCapacity),
+		touchChan:  make(chan string, 10000), // Buffer for batched LRU touches
 		stopChan:   make(chan struct{}),
 		casCounter: uint64(time.Now().UnixNano()),
 		DefaultTTL: defaultTTL,
@@ -119,13 +122,55 @@ func (w *Worker) run() {
 	for {
 		select {
 		case req := <-w.reqChan:
+			// Write requests need exclusive access
+			w.mu.Lock()
 			w.handleRequest(req)
+			w.mu.Unlock()
 		case <-expiryTicker.C:
+			// Batch process LRU touches and expire keys every 100ms
+			w.mu.Lock()
+			w.drainTouchChan()
 			w.expireKeys()
+			w.mu.Unlock()
 		case <-w.stopChan:
 			return
 		}
 	}
+}
+
+// drainTouchChan processes all pending LRU touch requests (must hold w.mu.Lock)
+func (w *Worker) drainTouchChan() {
+	for {
+		select {
+		case key := <-w.touchChan:
+			w.index.Touch(key)
+		default:
+			return
+		}
+	}
+}
+
+// DirectGet performs a lock-free GET.
+// Returns the value slice directly (caller must not modify it).
+func (w *Worker) DirectGet(key string) ([]byte, uint64, error) {
+	// Direct map access via sync.Map
+	entry, ok := w.index.Get(key)
+	if !ok {
+		return nil, 0, ErrKeyNotFound
+	}
+	// Check expiry
+	if entry.Expiry > 0 && entry.Expiry <= time.Now().UnixMilli() {
+		return nil, 0, ErrKeyNotFound
+	}
+
+	// Queue LRU touch for batched processing (non-blocking)
+	select {
+	case w.touchChan <- entry.Key:
+	default:
+		// Channel full, skip this touch
+	}
+
+	return entry.Value, entry.Cas, nil
 }
 
 func (w *Worker) expireKeys() {

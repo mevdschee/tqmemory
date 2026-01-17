@@ -135,7 +135,7 @@ run_benchmark() {
 
     # --- Start Memcached ---
     echo "Starting Memcached (Threads: $MEM_THREADS)..."
-    memcached -p 11222 -m 2048 -t $MEM_THREADS -u $(whoami) > /dev/null 2>&1 &
+    memcached -p 11222 -m 2048 -t $MEM_THREADS -u $(whoami) -c 100000 > /dev/null 2>&1 &
     MEM_PID=$!
 
     # Wait for startup
