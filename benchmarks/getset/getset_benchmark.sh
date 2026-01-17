@@ -147,12 +147,23 @@ run_benchmark() {
 
     # --- Run Benchmarks ---
 
-    # TQMemory Binary Protocol
-    echo "Benchmarking TQMemory..."
+    # TQMemory Binary Protocol (via Unix socket)
+    echo "Benchmarking TQMemory (socket)..."
     start_monitor $TQ_PID
     ./benchmark-tool -host $TQ_SOCKET -protocol memc-bin -label "TQMemory" -mode "memory" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
     STATS=$(stop_monitor $TQ_PID)
     awk -v stats="$STATS" -v threads="$THREAD_COUNT" '{print threads "," $0 "," stats}' results.tmp >> $OUTPUT
+
+    # TQMemory Package (direct calls, no network)
+    # Use /usr/bin/time since process ends before we can read /proc stats
+    echo "Benchmarking TQMemory (package)..."
+    /usr/bin/time -f "%M %U %S %e" -o time.tmp ./benchmark-tool -protocol package -threads $THREAD_COUNT -memory $MEMORY -label "TQPackage" -mode "memory" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
+    # Parse time output: maxrss(KB) user(s) sys(s) elapsed(s)
+    read MAX_KB USER_SEC SYS_SEC ELAPSED_SEC < time.tmp
+    MAX_MB=$((MAX_KB / 1024))
+    # CPU% = (user + sys) / elapsed * 100 using awk for precision
+    CPU_PCT=$(awk "BEGIN {printf \"%.0f\", ($USER_SEC + $SYS_SEC) / $ELAPSED_SEC * 100}")
+    awk -v mem="$MAX_MB" -v cpu="$CPU_PCT" -v threads="$THREAD_COUNT" '{print threads "," $0 "," mem "," cpu}' results.tmp >> $OUTPUT
 
     # Memcached
     echo "Benchmarking Memcached..."
@@ -212,13 +223,14 @@ ax1.grid(axis='y', linestyle='--', alpha=0.7)
 ax1.legend(title='Backend', loc='upper left')
 annotate_bars(ax1)
 
-# GET Performance by thread count
+# GET Performance by thread count (log scale for TQPackage comparison)
 get_df = df[df['Operation'] == 'GET']
 get_pivot = get_df.pivot(index='Threads', columns='Backend', values='RPS')
 get_pivot.plot(kind='bar', ax=ax2, width=0.8, rot=0, legend=False)
-ax2.set_title('GET Performance by Thread Count')
+ax2.set_title('GET Performance by Thread Count (Log Scale)')
 ax2.set_ylabel('Requests Per Second (RPS)')
 ax2.set_xlabel('Threads')
+ax2.set_yscale('log')
 ax2.grid(axis='y', linestyle='--', alpha=0.7)
 annotate_bars(ax2)
 
