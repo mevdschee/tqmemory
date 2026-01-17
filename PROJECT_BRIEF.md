@@ -20,6 +20,7 @@ Uses the same flags as Memcached:
 | Flag   | Default      | Description                                    |
 | ------ | ------------ | ---------------------------------------------- |
 | `-p`   | `11211`      | TCP port to listen on                          |
+| `-s`   |              | Unix socket path (overrides -p and -l)         |
 | `-l`   | (all)        | Interface to listen on (default: INADDR_ANY)   |
 | `-m`   | `64`         | Max memory to use for items in megabytes       |
 | `-c`   | `1024`       | Max simultaneous connections                   |

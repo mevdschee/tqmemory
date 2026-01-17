@@ -44,6 +44,7 @@ Uses the same flags as memcached (with long name alternatives):
 | Short  | Long           | Default      | Description                              |
 | ------ | -------------- | ------------ | ---------------------------------------- |
 | `-p`   | `-port`        | `11211`      | TCP port to listen on                    |
+| `-s`   | `-socket`      |              | Unix socket path (overrides -p and -l)   |
 | `-l`   | `-listen`      | (all)        | Interface to listen on                   |
 | `-m`   | `-memory`      | `64`         | Max memory in megabytes                  |
 | `-c`   | `-connections` | `1024`       | Max simultaneous connections             |
