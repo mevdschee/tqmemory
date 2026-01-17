@@ -12,6 +12,7 @@ Blog post: https://www.tqdev.com/2026-tqmemory-memcached-alternative
 - **Competitive Performance**: Matches or exceeds Memcached performance
 - **Memcached Compatible**: Supports all Memcached commands, text and binary
 - **Same CLI Flags**: Uses identical command-line options as memcached
+- **Go package**: Can be used as a Go package for in-process caching
 
 ## Requirements
 
