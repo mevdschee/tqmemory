@@ -4,12 +4,12 @@ This document describes the performance optimizations applied to TQMemory to ach
 
 ## Summary
 
-**Current Performance** (4 threads, 10 clients, 10KB values):
+**Current Performance** (4 threads, 10 clients, 64KB values):
 
 | Metric | TQMemory | Memcached | Difference |
 |--------|----------|-----------|------------|
-| SET | 149,000 RPS | 127,000 RPS | **+17%** |
-| GET | 270,000 RPS | 282,000 RPS | **-4%** |
+| SET | 164,000 RPS | 134,000 RPS | **+23%** |
+| GET | 262,000 RPS | 275,000 RPS | **-5%** |
 
 TQMemory is optimized for write-heavy workloads with larger values (typical SQL query result caching).
 
@@ -75,23 +75,25 @@ func (w *Worker) DirectGet(key string) ([]byte, uint64, error) {
 
 ---
 
-### Phase 4: sync.Map for Lock-Free Reads
+### Phase 4: Custom Concurrent Map (Replaces sync.Map)
 
 **File**: `pkg/tqmemory/index.go`
 
-**Change**: Replaced the plain map with `sync.Map` to enable lock-free concurrent reads.
+**Change**: Replaced sync.Map with regular map + RWMutex, added `lruElem` pointer to IndexEntry, removed `lruMap`.
 
 ```go
-type Index struct {
-    data sync.Map  // key → *IndexEntry, thread-safe
+type IndexEntry struct {
+    Key     string
+    Value   []byte
+    Expiry  int64
+    Cas     uint64
+    lruElem *list.Element  // Direct pointer to LRU element
 }
 
-func (idx *Index) Get(key string) (*IndexEntry, bool) {
-    val, ok := idx.data.Load(key)
-    if !ok {
-        return nil, false
-    }
-    return val.(*IndexEntry), true
+type Index struct {
+    data       map[string]*IndexEntry
+    expiryHeap *ExpiryHeap
+    lruList    *list.List  // Stores *IndexEntry directly
 }
 ```
 
@@ -224,9 +226,16 @@ Optimal shard count was determined experimentally:
 
 ---
 
+## Memory Optimization
+
+Key deduplication saves ~68 bytes per entry:
+- Removed `lruMap`: ~48 bytes per entry
+- Store `*IndexEntry` in LRU list instead of key string: ~20 bytes per key
+
+---
+
 ## Future Optimization Opportunities
 
-1. **Custom concurrent map**: Implement a purpose-built concurrent map with less overhead than sync.Map
-2. **io_uring**: Use Linux io_uring for more efficient network I/O
-3. **Memory pooling**: Pool frequently allocated objects (requests, responses)
-4. **NUMA awareness**: Bind workers to specific CPU cores for better cache locality
+1. **io_uring**: Use Linux io_uring for more efficient network I/O
+2. **Memory pooling**: Pool frequently allocated objects (requests, responses)
+3. **NUMA awareness**: Bind workers to specific CPU cores for better cache locality

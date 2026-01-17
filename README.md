@@ -73,12 +73,12 @@ tqmemory -config /etc/tqmemory.conf
 
 ## Performance
 
-**TQMemory vs Memcached** (4 threads, 10 clients, 10KB values)
+**TQMemory vs Memcached** (4 threads, 10 clients, 64KB values)
 
 | Operation | TQMemory     | Memcached    | Difference |
 | --------- | ------------ | ------------ | ---------- |
-| **SET**   | 142,220 RPS  | 121,106 RPS  | **+17%**   |
-| **GET**   | 249,682 RPS  | 239,313 RPS  | **+4%**    |
+| **SET**   | 156,187 RPS  | 118,093 RPS  | **+32%**   |
+| **GET**   | 247,842 RPS  | 269,063 RPS  | **-8%**    |
 
 ### Benchmark Chart
 

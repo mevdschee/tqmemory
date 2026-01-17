@@ -1,1 +1,17 @@
 Threads,Backend,Protocol,Operation,RPS,TimePerReq(ms),MaxMemory(MB),CPU(%)
+1,TQMemory,memc-bin,SET,49745.18,0.0201,1322,99
+1,TQMemory,memc-bin,GET,102934.70,0.0097,1322,99
+1,Memcached,memc-bin,SET,68048.85,0.0147,1073,100
+1,Memcached,memc-bin,GET,113726.99,0.0088,1073,100
+2,TQMemory,memc-bin,SET,92661.56,0.0108,1322,194
+2,TQMemory,memc-bin,GET,178524.40,0.0056,1322,194
+2,Memcached,memc-bin,SET,98637.17,0.0101,1074,168
+2,Memcached,memc-bin,GET,204158.32,0.0049,1074,168
+4,TQMemory,memc-bin,SET,156186.67,0.0064,1313,361
+4,TQMemory,memc-bin,GET,247841.95,0.0040,1313,361
+4,Memcached,memc-bin,SET,118093.35,0.0085,1074,247
+4,Memcached,memc-bin,GET,269063.22,0.0037,1074,247
+8,TQMemory,memc-bin,SET,180824.21,0.0055,1308,480
+8,TQMemory,memc-bin,GET,219050.14,0.0046,1308,480
+8,Memcached,memc-bin,SET,126130.32,0.0079,1074,308
+8,Memcached,memc-bin,GET,266408.10,0.0038,1074,308
