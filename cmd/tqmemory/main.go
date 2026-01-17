@@ -19,6 +19,7 @@ func main() {
 	// Memcached-compatible short flags
 	port := flag.Int("p", 11211, "TCP port to listen on")
 	listenAddr := flag.String("l", "", "Interface to listen on (default: INADDR_ANY)")
+	socketPath := flag.String("s", "", "Unix socket path (overrides -p and -l)")
 	memory := flag.Int("m", 64, "Max memory to use for items in megabytes")
 	connections := flag.Int("c", 1024, "Max simultaneous connections")
 	threads := flag.Int("t", 4, "Number of threads to use")
@@ -26,6 +27,7 @@ func main() {
 	// Long name alternatives (same variables)
 	flag.IntVar(port, "port", 11211, "TCP port to listen on")
 	flag.StringVar(listenAddr, "listen", "", "Interface to listen on")
+	flag.StringVar(socketPath, "socket", "", "Unix socket path")
 	flag.IntVar(memory, "memory", 64, "Max memory in megabytes")
 	flag.IntVar(connections, "connections", 1024, "Max simultaneous connections")
 	flag.IntVar(threads, "threads", 4, "Number of threads")
@@ -39,6 +41,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Memcached-compatible options:\n")
 		fmt.Fprintf(os.Stderr, "  -p, -port <num>          TCP port to listen on (default: 11211)\n")
 		fmt.Fprintf(os.Stderr, "  -l, -listen <addr>       Interface to listen on (default: INADDR_ANY)\n")
+		fmt.Fprintf(os.Stderr, "  -s, -socket <path>       Unix socket path (overrides -p and -l)\n")
 		fmt.Fprintf(os.Stderr, "  -m, -memory <num>        Max memory in megabytes (default: 64)\n")
 		fmt.Fprintf(os.Stderr, "  -c, -connections <num>   Max simultaneous connections (default: 1024)\n")
 		fmt.Fprintf(os.Stderr, "  -t, -threads <num>       Number of threads (default: 4)\n")
@@ -71,7 +74,9 @@ func main() {
 		log.Printf("Loaded config from %s", *configFile)
 	} else {
 		// Use command-line flags
-		if *listenAddr != "" {
+		if *socketPath != "" {
+			listenString = *socketPath
+		} else if *listenAddr != "" {
 			listenString = fmt.Sprintf("%s:%d", *listenAddr, *port)
 		} else {
 			listenString = fmt.Sprintf(":%d", *port)
@@ -88,6 +93,7 @@ func main() {
 	}
 	defer cache.Close()
 
+	// Use standard networking (io_uring is experimental)
 	srv := server.NewWithOptions(cache, listenString, maxConnections)
 	go func() {
 		if err := srv.Start(); err != nil {

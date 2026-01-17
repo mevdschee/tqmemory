@@ -95,8 +95,14 @@ func (r *RedisClient) Close() error {
 func main() {
 	flag.Parse()
 
+	// Determine network type based on host
+	network := "tcp"
+	if len(*host) > 0 && (*host)[0] == '/' {
+		network = "unix"
+	}
+
 	// Wait for server to come up (manual check)
-	conn, err := net.DialTimeout("tcp", *host, 2*time.Second)
+	conn, err := net.DialTimeout(network, *host, 2*time.Second)
 	if err != nil {
 		log.Fatalf("Cannot connect to %s: %v", *host, err)
 	}
@@ -195,7 +201,12 @@ type BinaryMemcacheClient struct {
 }
 
 func NewBinaryMemcacheClient(server string) *BinaryMemcacheClient {
-	conn, err := net.Dial("tcp", server)
+	// Determine network type based on server address
+	network := "tcp"
+	if len(server) > 0 && server[0] == '/' {
+		network = "unix"
+	}
+	conn, err := net.Dial(network, server)
 	if err != nil {
 		log.Fatalf("Failed to connect to %s: %v", server, err)
 	}

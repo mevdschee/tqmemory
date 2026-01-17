@@ -125,18 +125,21 @@ run_benchmark() {
     echo "Running Benchmark (TQMemory threads: $THREAD_COUNT, Memcached threads: $MEM_THREADS)"
     echo "==========================================================="
 
-    # Ensure ports are free
-    kill_port 11221
-    kill_port 11222
+    # Socket paths
+    TQ_SOCKET="/tmp/tqmemory.sock"
+    MEM_SOCKET="/tmp/memcached.sock"
+
+    # Cleanup old sockets
+    rm -f $TQ_SOCKET $MEM_SOCKET
 
     # --- Start TQMemory ---
     echo "Starting TQMemory (Threads: $THREAD_COUNT)..."
-    ./tqmemory-server -p 11221 -t $THREAD_COUNT -m $MEMORY > /dev/null 2>&1 &
+    ./tqmemory-server -s $TQ_SOCKET -t $THREAD_COUNT -m $MEMORY > /dev/null 2>&1 &
     TQ_PID=$!
 
     # --- Start Memcached ---
     echo "Starting Memcached (Threads: $MEM_THREADS)..."
-    memcached -p 11222 -m $MEMORY -t $MEM_THREADS -u $(whoami) -c 100000 > /dev/null 2>&1 &
+    memcached -s $MEM_SOCKET -m $MEMORY -t $MEM_THREADS -u $(whoami) -c 100000 > /dev/null 2>&1 &
     MEM_PID=$!
 
     # Wait for startup
@@ -147,14 +150,14 @@ run_benchmark() {
     # TQMemory Binary Protocol
     echo "Benchmarking TQMemory..."
     start_monitor $TQ_PID
-    ./benchmark-tool -host localhost:11221 -protocol memc-bin -label "TQMemory" -mode "memory" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
+    ./benchmark-tool -host $TQ_SOCKET -protocol memc-bin -label "TQMemory" -mode "memory" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
     STATS=$(stop_monitor $TQ_PID)
     awk -v stats="$STATS" -v threads="$THREAD_COUNT" '{print threads "," $0 "," stats}' results.tmp >> $OUTPUT
 
     # Memcached
     echo "Benchmarking Memcached..."
     start_monitor $MEM_PID
-    ./benchmark-tool -host localhost:11222 -protocol memc-bin -label "Memcached" -mode "memory" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
+    ./benchmark-tool -host $MEM_SOCKET -protocol memc-bin -label "Memcached" -mode "memory" -clients $CLIENTS -size $SIZE -requests $REQ_COUNT -csv > results.tmp
     STATS=$(stop_monitor $MEM_PID)
     awk -v stats="$STATS" -v threads="$MEM_THREADS" '{print threads "," $0 "," stats}' results.tmp >> $OUTPUT
 

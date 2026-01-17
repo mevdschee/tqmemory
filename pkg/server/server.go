@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -37,15 +38,23 @@ func NewWithOptions(cache tqmemory.CacheInterface, addr string, maxConnections i
 	}
 }
 
-// Start runs the TCP server.
+// Start runs the server (TCP or Unix socket based on address).
 func (s *Server) Start() error {
-	ln, err := net.Listen("tcp", s.addr)
+	// Determine network type based on address
+	network := "tcp"
+	if len(s.addr) > 0 && s.addr[0] == '/' {
+		network = "unix"
+		// Remove existing socket file if present
+		os.Remove(s.addr)
+	}
+
+	ln, err := net.Listen(network, s.addr)
 	if err != nil {
 		return err
 	}
 	defer ln.Close()
 
-	log.Printf("Listening on %s (max connections: %d)", s.addr, s.maxConnections)
+	log.Printf("Listening on %s %s (max connections: %d)", network, s.addr, s.maxConnections)
 
 	for {
 		conn, err := ln.Accept()
