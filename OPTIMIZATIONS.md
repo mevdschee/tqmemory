@@ -1,8 +1,6 @@
 # TQMemory Performance Optimizations
 
-This document describes the performance optimizations applied to TQMemory to achieve competitive performance with Memcached.
-
-## Optimization Phases
+This document describes the performance optimization phases applied to TQMemory to achieve competitive performance with Memcached.
 
 TQMemory is optimized for write-heavy workloads with larger values (typical SQL query result caching). It is tested with 4-8 threads, 10 clients, 10KB values, Unix sockets.
 
