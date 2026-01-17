@@ -105,7 +105,7 @@ go test ./pkg/tqmemory/...
 TQMemory uses a sharded, worker-based architecture optimized for high-throughput:
 
 - **Sharded Cache**: Keys are distributed across workers via FNV-1a hash
-- **Direct GET Path**: Read operations use sync.Map for lock-free access
+- **Direct GET Path**: Read operations use RWMutex for concurrent access
 - **Batched LRU**: LRU updates are processed in batches for efficiency
 - **Memory Management**: Per-worker memory limits with LRU eviction
 

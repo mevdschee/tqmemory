@@ -43,22 +43,23 @@ Uses a **sharded, worker-based architecture** with optimized read path:
 | ---------------- | ------------------------------------------------ |
 | **ShardedCache** | Routes keys to workers via inline FNV-1a hash    |
 | **Worker**       | Owns shard data, handles writes via channel      |
-| **Index**        | sync.Map for thread-safe O(1) key lookup         |
+| **Index**        | RWMutex-protected map for O(1) key lookup        |
 | **ExpiryHeap**   | Min-heap for efficient TTL management            |
 | **LRU List**     | Doubly linked list for eviction ordering         |
 
 **How it works**:
 
 1. Each worker owns a shard of data (divided by key hash)
-2. **GET operations**: Direct sync.Map access (lock-free read path)
+2. **GET operations**: Direct map access with RLock (concurrent reads)
 3. **SET/DELETE operations**: Sent via buffered channel to worker goroutine
 4. LRU touches are batched and processed every 100ms
 5. GOMAXPROCS = `max(min(cpu_count, workers), 1)` for optimal parallelism
 
 **Benefits**:
 
-- **Fast reads**: Direct sync.Map access, no channel overhead for GETs
+- **Fast reads**: Direct map access with RLock, no channel overhead for GETs
 - **Write serialization**: All writes processed by single worker goroutine
+- **Per-worker LRU**: Each shard has independent memory limit and eviction
 - **Batched LRU**: LRU updates processed periodically to reduce overhead
 - **Predictable latency**: Sequential write processing, no lock contention
 
