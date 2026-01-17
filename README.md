@@ -81,7 +81,7 @@ tqmemory -config /etc/tqmemory.conf
 | 4       | **233K** / 261K    | 161K / 329K         | **+45%** | -21%  |
 | 8       | **255K** / 267K    | 152K / 308K         | **+68%** | -13%  |
 
-**Direct Package Calls** (in-process, 10 clients, 10KB values)
+**TQMemory as Go package** (in-process, 10 clients, 10KB values)
 
 | Threads | TQMemory (SET/GET)   |
 |---------|----------------------|
@@ -89,8 +89,8 @@ tqmemory -config /etc/tqmemory.conf
 | 8       | **590K** / **21.3M** |
 
 **Highlights:**
-- SET operations are **1.5-1.7x faster** than Memcached at 4-8 threads
-- GET is slower over network, but **50-70x faster** with direct package calls
+- SET operations over sockets are **1.5-1.7x faster** than Memcached at 4-8 threads
+- GET is slower over sockets, but **50-70x faster** with direct package calls
 
 ### Benchmark Chart
 
