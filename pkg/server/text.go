@@ -67,6 +67,10 @@ func (s *Server) handleText(conn net.Conn, reader *bufio.Reader, writer *bufio.W
 			s.handleTextIncrDecr(writer, parts, false)
 		case "TOUCH":
 			s.handleTextTouch(writer, parts)
+		case "GAT":
+			s.handleTextGat(writer, parts, false)
+		case "GATS":
+			s.handleTextGat(writer, parts, true)
 		case "FLUSH_ALL":
 			s.handleTextFlushAll(writer, parts)
 		case "VERBOSITY":
@@ -140,9 +144,17 @@ func (s *Server) handleTextStorage(reader *bufio.Reader, writer *bufio.Writer, p
 
 	// Calculate TTL
 	var ttl time.Duration
-	if exptime > 0 {
+	if exptime < 0 {
+		// Negative exptime means already expired
+		ttl = time.Nanosecond
+	} else if exptime > 0 {
 		if exptime > 2592000 {
+			// Unix timestamp
 			ttl = time.Until(time.Unix(exptime, 0))
+			if ttl <= 0 {
+				// Timestamp is in the past, already expired
+				ttl = time.Nanosecond
+			}
 		} else {
 			ttl = time.Duration(exptime) * time.Second
 		}
@@ -174,7 +186,8 @@ func (s *Server) handleTextStorage(reader *bufio.Reader, writer *bufio.Writer, p
 }
 
 func (s *Server) handleTextCas(reader *bufio.Reader, writer *bufio.Writer, parts []string) {
-	if len(parts) < 6 {
+	// Need at least 5 parts to parse bytes (key, flags, exptime, bytes)
+	if len(parts) < 5 {
 		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
 		return
 	}
@@ -198,8 +211,6 @@ func (s *Server) handleTextCas(reader *bufio.Reader, writer *bufio.Writer, parts
 		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
 		return
 	}
-	// Validate cas token (must be numeric) - check BEFORE reading data
-	casToken, err := strconv.ParseUint(parts[5], 10, 64)
 
 	// Read value (must always consume the data to stay in sync)
 	value := make([]byte, bytes)
@@ -213,7 +224,12 @@ func (s *Server) handleTextCas(reader *bufio.Reader, writer *bufio.Writer, parts
 		reader.ReadByte()
 	}
 
-	// Now check if cas token was invalid
+	// Now check if cas token is present and valid
+	if len(parts) < 6 {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+	casToken, err := strconv.ParseUint(parts[5], 10, 64)
 	if err != nil {
 		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
 		return
@@ -222,9 +238,17 @@ func (s *Server) handleTextCas(reader *bufio.Reader, writer *bufio.Writer, parts
 
 	// Calculate TTL
 	var ttl time.Duration
-	if exptime > 0 {
+	if exptime < 0 {
+		// Negative exptime means already expired
+		ttl = time.Nanosecond
+	} else if exptime > 0 {
 		if exptime > 2592000 {
+			// Unix timestamp
 			ttl = time.Until(time.Unix(exptime, 0))
+			if ttl <= 0 {
+				// Timestamp is in the past, already expired
+				ttl = time.Nanosecond
+			}
 		} else {
 			ttl = time.Duration(exptime) * time.Second
 		}
@@ -346,9 +370,17 @@ func (s *Server) handleTextTouch(writer *bufio.Writer, parts []string) {
 	noreply := len(parts) > 3 && parts[3] == "noreply"
 
 	var ttl time.Duration
-	if exptime > 0 {
+	if exptime < 0 {
+		// Negative exptime means already expired
+		ttl = time.Nanosecond
+	} else if exptime > 0 {
 		if exptime > 2592000 {
+			// Unix timestamp
 			ttl = time.Until(time.Unix(exptime, 0))
+			if ttl <= 0 {
+				// Timestamp is in the past, already expired
+				ttl = time.Nanosecond
+			}
 		} else {
 			ttl = time.Duration(exptime) * time.Second
 		}
@@ -369,6 +401,61 @@ func (s *Server) handleTextTouch(writer *bufio.Writer, parts []string) {
 	if !noreply {
 		writer.WriteString("TOUCHED\r\n")
 	}
+}
+
+// handleTextGat handles GAT (get and touch) and GATS commands
+func (s *Server) handleTextGat(writer *bufio.Writer, parts []string, withCas bool) {
+	if len(parts) < 3 {
+		writer.WriteString("ERROR\r\n")
+		return
+	}
+
+	exptime, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+
+	// Calculate TTL
+	var ttl time.Duration
+	if exptime < 0 {
+		ttl = time.Nanosecond
+	} else if exptime > 0 {
+		if exptime > 2592000 {
+			ttl = time.Until(time.Unix(exptime, 0))
+			if ttl <= 0 {
+				ttl = time.Nanosecond
+			}
+		} else {
+			ttl = time.Duration(exptime) * time.Second
+		}
+	}
+
+	// Process each key
+	for _, key := range parts[2:] {
+		// Get the value first (before touching with potentially expired TTL)
+		value, cas, err := s.cache.Get(key)
+		if err != nil {
+			continue // Key not found, skip
+		}
+
+		// Now touch with new expiry
+		s.cache.Touch(key, ttl)
+
+		// Output the value
+		writer.WriteString("VALUE ")
+		writer.WriteString(key)
+		writer.WriteString(" 0 ")
+		writer.WriteString(strconv.Itoa(len(value)))
+		if withCas {
+			writer.WriteString(" ")
+			writer.WriteString(strconv.FormatUint(cas, 10))
+		}
+		writer.WriteString("\r\n")
+		writer.Write(value)
+		writer.WriteString("\r\n")
+	}
+	writer.WriteString("END\r\n")
 }
 
 func (s *Server) handleTextFlushAll(writer *bufio.Writer, parts []string) {
