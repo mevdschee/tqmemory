@@ -2,7 +2,8 @@
 
 TQMemory is a high-performance, non-persistent memory cache server. It provides a
 Memcached-compatible interface, making it ideal as a drop-in replacement for
-`memcached`.
+`memcached`. Especially for Go developers, it can be used as a Go package for
+in-process caching.
 
 Blog post: https://www.tqdev.com/2026-tqmemory-memcached-alternative
 
