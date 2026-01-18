@@ -5,7 +5,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TEST_DIR="$SCRIPT_DIR/memcached_tests/t"
+TEST_DIR="$SCRIPT_DIR/perl/t"
 BINARY="$SCRIPT_DIR/tqmemory_test"
 RESULTS_DIR="$SCRIPT_DIR/results"
 

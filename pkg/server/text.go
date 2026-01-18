@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -13,7 +14,13 @@ import (
 	"github.com/mevdschee/tqmemory/pkg/tqmemory"
 )
 
-func (s *Server) handleText(reader *bufio.Reader, writer *bufio.Writer) {
+const (
+	maxKeyLength  = 250         // Memcached max key size
+	maxLineLength = 2 * 1024    // Max command line length before closing connection
+	maxValueSize  = 1024 * 1024 // Memcached default max item size (1MB)
+)
+
+func (s *Server) handleText(conn net.Conn, reader *bufio.Reader, writer *bufio.Writer) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -42,6 +49,10 @@ func (s *Server) handleText(reader *bufio.Reader, writer *bufio.Writer) {
 			s.handleTextStorage(reader, writer, parts, "ADD")
 		case "REPLACE":
 			s.handleTextStorage(reader, writer, parts, "REPLACE")
+		case "APPEND":
+			s.handleTextAppendPrepend(reader, writer, parts, false)
+		case "PREPEND":
+			s.handleTextAppendPrepend(reader, writer, parts, true)
 		case "CAS":
 			s.handleTextCas(reader, writer, parts)
 		case "GET":
@@ -58,6 +69,8 @@ func (s *Server) handleText(reader *bufio.Reader, writer *bufio.Writer) {
 			s.handleTextTouch(writer, parts)
 		case "FLUSH_ALL":
 			s.handleTextFlushAll(writer, parts)
+		case "VERBOSITY":
+			// Silently accept verbosity command (noreply handled implicitly)
 		case "QUIT":
 			return
 		case "VERSION":
@@ -98,6 +111,16 @@ func (s *Server) handleTextStorage(reader *bufio.Reader, writer *bufio.Writer, p
 	bytes, err := strconv.Atoi(parts[4])
 	if err != nil {
 		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+	// Check value size limit (Memcached default is 1MB)
+	if bytes > maxValueSize {
+		// Still need to read and discard the data
+		discard := make([]byte, bytes)
+		io.ReadFull(reader, discard)
+		reader.ReadByte() // \r
+		reader.ReadByte() // \n
+		writer.WriteString("SERVER_ERROR object too large for cache\r\n")
 		return
 	}
 	noreply := len(parts) > 5 && parts[5] == "noreply"
@@ -358,6 +381,58 @@ func (s *Server) handleTextFlushAll(writer *bufio.Writer, parts []string) {
 	s.cache.FlushAll()
 	if !noreply {
 		writer.WriteString("OK\r\n")
+	}
+}
+
+func (s *Server) handleTextAppendPrepend(reader *bufio.Reader, writer *bufio.Writer, parts []string, prepend bool) {
+	// append/prepend <key> <flags> <exptime> <bytes> [noreply]\r\n<data>\r\n
+	if len(parts) < 5 {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+
+	key := parts[1]
+	// Validate bytes (must be numeric)
+	bytes, err := strconv.Atoi(parts[4])
+	if err != nil {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+	noreply := len(parts) > 5 && parts[5] == "noreply"
+
+	// Read value
+	value := make([]byte, bytes)
+	if _, err := io.ReadFull(reader, value); err != nil {
+		writer.WriteString("SERVER_ERROR read error\r\n")
+		return
+	}
+
+	// Read \r\n
+	c, _ := reader.ReadByte()
+	if c == '\r' {
+		reader.ReadByte()
+	}
+
+	// Call cache append/prepend
+	if prepend {
+		_, err = s.cache.Prepend(key, value)
+	} else {
+		_, err = s.cache.Append(key, value)
+	}
+
+	if err != nil {
+		if err == tqmemory.ErrKeyNotFound {
+			if !noreply {
+				writer.WriteString("NOT_STORED\r\n")
+			}
+			return
+		}
+		writer.WriteString("SERVER_ERROR " + err.Error() + "\r\n")
+		return
+	}
+
+	if !noreply {
+		writer.WriteString("STORED\r\n")
 	}
 }
 

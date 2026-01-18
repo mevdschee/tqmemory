@@ -101,7 +101,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	if firstByte[0] == 0x80 {
 		s.handleBinary(conn, reader, writer)
 	} else {
-		s.handleText(reader, writer)
+		s.handleText(conn, reader, writer)
 	}
 }
 

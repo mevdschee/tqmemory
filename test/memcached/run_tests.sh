@@ -7,83 +7,83 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TEST_DIR="$SCRIPT_DIR/memcached_tests"
+TEST_DIR="$SCRIPT_DIR/perl"
 PORT="${TQMEMORY_PORT:-11299}"
 BINARY="$SCRIPT_DIR/tqmemory_test"
 
 # Test files to download from official memcached repo
-MEMCACHED_RAW="https://raw.githubusercontent.com/memcached/memcached/master"
-TEST_FILES=(
-    "t/lib/MemcachedTest.pm"
-    "t/getset.t"
-    "t/cas.t"
-    "t/incrdecr.t"
-    "t/touch.t"
-    "t/flush-all.t"
-    "t/noreply.t"
-    "t/flags.t"
-    "t/expirations.t"
-)
+# MEMCACHED_RAW="https://raw.githubusercontent.com/memcached/memcached/master"
+# TEST_FILES=(
+#     "t/lib/MemcachedTest.pm"
+#     "t/getset.t"
+#     "t/cas.t"
+#     "t/incrdecr.t"
+#     "t/touch.t"
+#     "t/flush-all.t"
+#     "t/noreply.t"
+#     "t/flags.t"
+#     "t/expirations.t"
+# )
 
-download_tests() {
-    echo "=== Downloading Memcached Test Suite ==="
-    mkdir -p "$TEST_DIR/t/lib"
+# download_tests() {
+#     echo "=== Downloading Memcached Test Suite ==="
+#     mkdir -p "$TEST_DIR/t/lib"
     
-    for file in "${TEST_FILES[@]}"; do
-        local dest="$TEST_DIR/$file"
-        local url="$MEMCACHED_RAW/$file"
+#     for file in "${TEST_FILES[@]}"; do
+#         local dest="$TEST_DIR/$file"
+#         local url="$MEMCACHED_RAW/$file"
         
-        if [ ! -f "$dest" ]; then
-            echo "Downloading $file..."
-            mkdir -p "$(dirname "$dest")"
-            curl -sL "$url" -o "$dest"
-        fi
-    done
-    echo ""
-}
+#         if [ ! -f "$dest" ]; then
+#             echo "Downloading $file..."
+#             mkdir -p "$(dirname "$dest")"
+#             curl -sL "$url" -o "$dest"
+#         fi
+#     done
+#     echo ""
+# }
 
-patch_test_library() {
-    echo "=== Patching MemcachedTest.pm for TQMemory ==="
-    local pm_file="$TEST_DIR/t/lib/MemcachedTest.pm"
+# patch_test_library() {
+#     echo "=== Patching MemcachedTest.pm for TQMemory ==="
+#     local pm_file="$TEST_DIR/t/lib/MemcachedTest.pm"
     
-    # Check if already patched
-    if grep -q "TQMEMORY_PATCHED" "$pm_file" 2>/dev/null; then
-        echo "Already patched"
-        echo ""
-        return
-    fi
+#     # Check if already patched
+#     if grep -q "TQMEMORY_PATCHED" "$pm_file" 2>/dev/null; then
+#         echo "Already patched"
+#         echo ""
+#         return
+#     fi
     
-    # Create backup
-    cp "$pm_file" "$pm_file.orig"
+#     # Create backup
+#     cp "$pm_file" "$pm_file.orig"
 
-    # Apply all patches with a single Perl script for reliability
-    perl -i -pe '
-        # Mark as patched
-        if (/^package MemcachedTest;/) {
-            $_ .= "# TQMEMORY_PATCHED\n";
-        }
+#     # Apply all patches with a single Perl script for reliability
+#     perl -i -pe '
+#         # Mark as patched
+#         if (/^package MemcachedTest;/) {
+#             $_ .= "# TQMEMORY_PATCHED\n";
+#         }
         
-        # Use TQMEMORY_BINARY env var
-        s/^(sub get_memcached_exe \{)/$1\n    return \$ENV{TQMEMORY_BINARY} if \$ENV{TQMEMORY_BINARY};/;
+#         # Use TQMEMORY_BINARY env var
+#         s/^(sub get_memcached_exe \{)/$1\n    return \$ENV{TQMEMORY_BINARY} if \$ENV{TQMEMORY_BINARY};/;
         
-        # Remove unsupported args
-        s/\$args \.= " -u root";/# Disabled for TQMemory: -u root/;
-        s/\$args \.= " -o relaxed_privileges";/# Disabled for TQMemory: -o relaxed_privileges/;
-        s/\$args \.= " -U \$udpport";/# Disabled for TQMemory: -U/;
-        s/\$args \.= " -Z";/# Disabled for TQMemory: -Z/;
-        s/\$args \.= " -o ssl_chain_cert=\$server_crt";/# Disabled for TQMemory/;
-        s/\$args \.= " -o ssl_key=\$server_key";/# Disabled for TQMemory/;
+#         # Remove unsupported args
+#         s/\$args \.= " -u root";/# Disabled for TQMemory: -u root/;
+#         s/\$args \.= " -o relaxed_privileges";/# Disabled for TQMemory: -o relaxed_privileges/;
+#         s/\$args \.= " -U \$udpport";/# Disabled for TQMemory: -U/;
+#         s/\$args \.= " -Z";/# Disabled for TQMemory: -Z/;
+#         s/\$args \.= " -o ssl_chain_cert=\$server_crt";/# Disabled for TQMemory/;
+#         s/\$args \.= " -o ssl_key=\$server_key";/# Disabled for TQMemory/;
         
-        # Remove timedrun wrapper
-        s/my \$cmd = "\$builddir\/timedrun 600 \$valgrind \$exe \$args";/my \$cmd = "\$exe \$args";/;
+#         # Remove timedrun wrapper
+#         s/my \$cmd = "\$builddir\/timedrun 600 \$valgrind \$exe \$args";/my \$cmd = "\$exe \$args";/;
         
-        # Make print_help return empty to avoid Usage spam
-        s/^(sub print_help \{)/$1\n    return "" if \$ENV{TQMEMORY_BINARY};/;
-    ' "$pm_file"
+#         # Make print_help return empty to avoid Usage spam
+#         s/^(sub print_help \{)/$1\n    return "" if \$ENV{TQMEMORY_BINARY};/;
+#     ' "$pm_file"
     
-    echo "Patched MemcachedTest.pm"
-    echo ""
-}
+#     echo "Patched MemcachedTest.pm"
+#     echo ""
+# }
 
 build_tqmemory() {
     echo "=== Building TQMemory ==="
@@ -162,8 +162,8 @@ if ! perl -e 'use Test::More' 2>/dev/null; then
     exit 1
 fi
 
-download_tests
-patch_test_library
+#download_tests
+#patch_test_library
 build_tqmemory
 run_tests
 
