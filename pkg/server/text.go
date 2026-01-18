@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mevdschee/tqmemory/pkg/tqmemory"
 )
 
 func (s *Server) handleText(reader *bufio.Reader, writer *bufio.Writer) {
@@ -75,13 +77,29 @@ func (s *Server) handleText(reader *bufio.Reader, writer *bufio.Writer) {
 
 func (s *Server) handleTextStorage(reader *bufio.Reader, writer *bufio.Writer, parts []string, op string) {
 	if len(parts) < 5 {
-		writer.WriteString("CLIENT_ERROR bad data chunk\r\n")
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
 		return
 	}
 
 	key := parts[1]
-	exptime, _ := strconv.ParseInt(parts[3], 10, 64)
-	bytes, _ := strconv.Atoi(parts[4])
+	// Validate flags (must be numeric)
+	_, err := strconv.ParseUint(parts[2], 10, 32)
+	if err != nil {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+	// Validate exptime (must be numeric)
+	exptime, err := strconv.ParseInt(parts[3], 10, 64)
+	if err != nil {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+	// Validate bytes (must be numeric)
+	bytes, err := strconv.Atoi(parts[4])
+	if err != nil {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
 	noreply := len(parts) > 5 && parts[5] == "noreply"
 
 	// Read value
@@ -107,7 +125,6 @@ func (s *Server) handleTextStorage(reader *bufio.Reader, writer *bufio.Writer, p
 		}
 	}
 
-	var err error
 	switch op {
 	case "SET":
 		_, err = s.cache.Set(key, value, ttl)
@@ -118,7 +135,7 @@ func (s *Server) handleTextStorage(reader *bufio.Reader, writer *bufio.Writer, p
 	}
 
 	if err != nil {
-		if err == os.ErrExist || err == os.ErrNotExist {
+		if err == tqmemory.ErrKeyExists || err == tqmemory.ErrKeyNotFound {
 			if !noreply {
 				writer.WriteString("NOT_STORED\r\n")
 			}
@@ -140,8 +157,25 @@ func (s *Server) handleTextCas(reader *bufio.Reader, writer *bufio.Writer, parts
 	}
 
 	key := parts[1]
-	exptime, _ := strconv.ParseInt(parts[3], 10, 64)
-	bytes, _ := strconv.Atoi(parts[4])
+	// Validate flags (must be numeric)
+	_, err := strconv.ParseUint(parts[2], 10, 32)
+	if err != nil {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+	// Validate exptime (must be numeric)
+	exptime, err := strconv.ParseInt(parts[3], 10, 64)
+	if err != nil {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+	// Validate bytes (must be numeric)
+	bytes, err := strconv.Atoi(parts[4])
+	if err != nil {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+	// Validate cas token (must be numeric)
 	casToken, err := strconv.ParseUint(parts[5], 10, 64)
 	if err != nil {
 		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
@@ -174,13 +208,13 @@ func (s *Server) handleTextCas(reader *bufio.Reader, writer *bufio.Writer, parts
 
 	_, err = s.cache.Cas(key, value, ttl, casToken)
 	if err != nil {
-		if err == os.ErrExist {
+		if err == tqmemory.ErrCasMismatch {
 			if !noreply {
 				writer.WriteString("EXISTS\r\n")
 			}
 			return
 		}
-		if err == os.ErrNotExist {
+		if err == tqmemory.ErrKeyNotFound {
 			if !noreply {
 				writer.WriteString("NOT_FOUND\r\n")
 			}
@@ -262,7 +296,7 @@ func (s *Server) handleTextIncrDecr(writer *bufio.Writer, parts []string, incr b
 	}
 
 	if err != nil {
-		if err == os.ErrNotExist {
+		if err == tqmemory.ErrKeyNotFound {
 			if !noreply {
 				writer.WriteString("NOT_FOUND\r\n")
 			}
@@ -299,7 +333,7 @@ func (s *Server) handleTextTouch(writer *bufio.Writer, parts []string) {
 	_, err := s.cache.Touch(key, ttl)
 	if err != nil {
 		if !noreply {
-			if err == os.ErrNotExist {
+			if err == tqmemory.ErrKeyNotFound {
 				writer.WriteString("NOT_FOUND\r\n")
 			} else {
 				writer.WriteString("SERVER_ERROR " + err.Error() + "\r\n")

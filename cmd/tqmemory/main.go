@@ -34,6 +34,7 @@ func main() {
 
 	// TQMemory-specific options (not in memcached)
 	configFile := flag.String("config", "", "Path to config file")
+	pprofEnabled := flag.Bool("pprof", false, "Enable pprof profiling server on :6062")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n", os.Args[0])
@@ -47,6 +48,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  -t, -threads <num>       Number of threads (default: 4)\n")
 		fmt.Fprintf(os.Stderr, "\nTQMemory options:\n")
 		fmt.Fprintf(os.Stderr, "  -config <file>           Path to config file\n")
+		fmt.Fprintf(os.Stderr, "  -pprof                   Enable pprof profiling server on :6062\n")
 	}
 	flag.Parse()
 
@@ -101,13 +103,15 @@ func main() {
 		}
 	}()
 
-	// Start pprof server
-	go func() {
-		log.Println("Starting pprof server on :6062")
-		if err := http.ListenAndServe("localhost:6062", nil); err != nil {
-			log.Println("Pprof failed:", err)
-		}
-	}()
+	// Start pprof server if enabled
+	if *pprofEnabled {
+		go func() {
+			log.Println("Starting pprof server on :6062")
+			if err := http.ListenAndServe("localhost:6062", nil); err != nil {
+				log.Println("Pprof failed:", err)
+			}
+		}()
+	}
 
 	// Set up signal handling
 	quit := make(chan os.Signal, 1)
