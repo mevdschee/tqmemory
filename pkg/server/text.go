@@ -198,26 +198,27 @@ func (s *Server) handleTextCas(reader *bufio.Reader, writer *bufio.Writer, parts
 		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
 		return
 	}
-	// Validate cas token (must be numeric)
+	// Validate cas token (must be numeric) - check BEFORE reading data
 	casToken, err := strconv.ParseUint(parts[5], 10, 64)
-	if err != nil {
-		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
-		return
-	}
-	noreply := len(parts) > 6 && parts[6] == "noreply"
 
-	// Read value
+	// Read value (must always consume the data to stay in sync)
 	value := make([]byte, bytes)
-	if _, err := io.ReadFull(reader, value); err != nil {
+	if _, err2 := io.ReadFull(reader, value); err2 != nil {
 		writer.WriteString("SERVER_ERROR read error\r\n")
 		return
 	}
-
 	// Read \r\n
 	c, _ := reader.ReadByte()
 	if c == '\r' {
 		reader.ReadByte()
 	}
+
+	// Now check if cas token was invalid
+	if err != nil {
+		writer.WriteString("CLIENT_ERROR bad command line format\r\n")
+		return
+	}
+	noreply := len(parts) > 6 && parts[6] == "noreply"
 
 	// Calculate TTL
 	var ttl time.Duration
