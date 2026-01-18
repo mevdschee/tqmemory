@@ -405,7 +405,7 @@ func (w *Worker) doIncrDecr(key string, delta uint64, incr bool) *Response {
 	currentStr := string(entry.Value)
 	current, err := strconv.ParseUint(currentStr, 10, 64)
 	if err != nil {
-		current = 0
+		return &Response{Err: ErrNotNumeric}
 	}
 
 	// Apply increment/decrement

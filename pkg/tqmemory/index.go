@@ -13,6 +13,7 @@ var (
 	ErrValueTooLarge = errors.New("value too large")
 	ErrKeyExists     = errors.New("key already exists")
 	ErrCasMismatch   = errors.New("cas mismatch")
+	ErrNotNumeric    = errors.New("cannot increment or decrement non-numeric value")
 )
 
 // IndexEntry represents an entry in the index
