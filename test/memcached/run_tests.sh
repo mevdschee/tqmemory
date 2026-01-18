@@ -219,6 +219,7 @@ patch_test_library
 patch_test_files
 build_tqmemory
 run_tests
+cleanup
 
 echo ""
 echo "=== COMPLETED ==="
