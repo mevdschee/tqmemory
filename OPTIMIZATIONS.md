@@ -44,23 +44,15 @@ type Index struct {
 
 ---
 
-### Phase 3: Direct GET Path with RWMutex
+### Phase 3: Direct GET Path with RWMutex (Reverted)
 
 **File**: `pkg/tqmemory/worker.go`, `pkg/tqmemory/sharded.go`
 
 **Change**: Added `DirectGet()` method that bypasses the channel for read operations, using `RWMutex` for concurrent access.
 
-```go
-func (w *Worker) DirectGet(key string) ([]byte, uint64, error) {
-    w.mu.RLock()
-    entry, ok := w.index.Get(key)
-    // ... check expiry ...
-    w.mu.RUnlock()
-    return entry.Value, entry.Cas, nil
-}
-```
-
 **Result**: +10% improvement. Eliminated channel overhead for GET operations.
+
+**Status**: **Reverted** in favor of a fully lock-free design. All operations (including GET) now go through the worker channel, eliminating the need for any locks. The single-writer-per-shard model is simpler and avoids lock contention entirely.
 
 ---
 
@@ -149,29 +141,15 @@ return entry.Value, entry.Cas, nil
 
 ---
 
-### Phase 7: Batched LRU Touch
+### Phase 7: Batched LRU Touch (Reverted)
 
 **File**: `pkg/tqmemory/worker.go`
 
-**Change**: LRU touches are queued to a buffered channel and processed in batches every 100ms.
-
-```go
-// In DirectGet:
-select {
-case w.touchChan <- entry.Key:
-default:
-    // Channel full, skip this touch
-}
-
-// In worker run loop:
-case <-expiryTicker.C:
-    w.mu.Lock()
-    w.drainTouchChan()  // Process all pending LRU touches
-    w.expireKeys()
-    w.mu.Unlock()
-```
+**Change**: LRU touches were queued to a buffered channel and processed in batches every 100ms.
 
 **Result**: +3% improvement. Reduced lock contention by batching LRU updates.
+
+**Status**: **Reverted** along with Phase 3. Since all operations now go through the worker channel (single-threaded per shard), LRU touches are processed inline with no lock contention. The batching mechanism is no longer needed.
 
 ---
 

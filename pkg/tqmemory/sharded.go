@@ -94,9 +94,13 @@ func (sc *ShardedCache) sendRequest(workerIdx int, req *Request) *Response {
 	return resp
 }
 
-// Get retrieves a value from the cache using direct read path (no channel overhead).
+// Get retrieves a value from the cache.
 func (sc *ShardedCache) Get(key string) ([]byte, uint64, error) {
-	return sc.workers[sc.workerFor(key)].DirectGet(key)
+	resp := sc.sendRequest(sc.workerFor(key), &Request{
+		Op:  OpGet,
+		Key: key,
+	})
+	return resp.Value, resp.Cas, resp.Err
 }
 
 // Set stores a value in the cache.

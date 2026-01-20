@@ -2,7 +2,6 @@ package tqmemory
 
 import (
 	"strconv"
-	"sync"
 	"time"
 )
 
@@ -46,17 +45,16 @@ type Response struct {
 
 // Worker is the single-threaded cache worker
 type Worker struct {
-	mu         sync.RWMutex // Protects index for direct reads
 	index      *Index
 	reqChan    chan *Request
-	touchChan  chan string // Buffered channel for batched LRU touches
 	stopChan   chan struct{}
-	wg         sync.WaitGroup
 	casCounter uint64
 	DefaultTTL time.Duration
 	maxMemory  int64 // Max memory in bytes (0 = unlimited)
 	usedMemory int64 // Current memory usage
 	evictions  uint64
+	running    bool
+	done       chan struct{}
 }
 
 // NewWorker creates a new worker
@@ -64,26 +62,29 @@ func NewWorker(defaultTTL time.Duration, channelCapacity int, maxMemory int64) *
 	return &Worker{
 		index:      NewIndex(),
 		reqChan:    make(chan *Request, channelCapacity),
-		touchChan:  make(chan string, 10000),
 		stopChan:   make(chan struct{}),
 		casCounter: uint64(time.Now().UnixNano()),
 		DefaultTTL: defaultTTL,
 		maxMemory:  maxMemory,
 		usedMemory: 0,
 		evictions:  0,
+		done:       make(chan struct{}),
 	}
 }
 
 // Start starts the worker goroutine
 func (w *Worker) Start() {
-	w.wg.Add(1)
+	w.running = true
 	go w.run()
 }
 
 // Stop stops the worker and waits for it to finish
 func (w *Worker) Stop() {
-	close(w.stopChan)
-	w.wg.Wait()
+	if w.running {
+		close(w.stopChan)
+		<-w.done
+		w.running = false
+	}
 }
 
 // RequestChan returns the request channel
@@ -113,7 +114,7 @@ func (w *Worker) Close() error {
 }
 
 func (w *Worker) run() {
-	defer w.wg.Done()
+	defer close(w.done)
 
 	// Background ticker for maintenance tasks
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -122,62 +123,13 @@ func (w *Worker) run() {
 	for {
 		select {
 		case req := <-w.reqChan:
-			// Write requests need exclusive access
-			w.mu.Lock()
 			w.handleRequest(req)
-			w.mu.Unlock()
 		case <-ticker.C:
-			// Batch process: LRU touches and expiry
-			w.mu.Lock()
-			w.drainTouchChan()
 			w.expireKeys()
-			w.mu.Unlock()
 		case <-w.stopChan:
 			return
 		}
 	}
-}
-
-// drainTouchChan processes all pending LRU touch requests (must hold w.mu.Lock)
-func (w *Worker) drainTouchChan() {
-	for {
-		select {
-		case key := <-w.touchChan:
-			w.index.Touch(key)
-		default:
-			return
-		}
-	}
-}
-
-// DirectGet performs a read-locked GET.
-// Returns the value slice directly (caller must not modify it).
-func (w *Worker) DirectGet(key string) ([]byte, uint64, error) {
-	w.mu.RLock()
-	entry, ok := w.index.Get(key)
-	if !ok {
-		w.mu.RUnlock()
-		return nil, 0, ErrKeyNotFound
-	}
-	// Check expiry
-	if entry.Expiry > 0 && entry.Expiry <= time.Now().UnixMilli() {
-		w.mu.RUnlock()
-		return nil, 0, ErrKeyNotFound
-	}
-	// Capture values before releasing lock
-	value := entry.Value
-	cas := entry.Cas
-	keyToTouch := entry.Key
-	w.mu.RUnlock()
-
-	// Queue LRU touch for batched processing (non-blocking)
-	select {
-	case w.touchChan <- keyToTouch:
-	default:
-		// Channel full, skip this touch
-	}
-
-	return value, cas, nil
 }
 
 func (w *Worker) expireKeys() {

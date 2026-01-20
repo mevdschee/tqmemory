@@ -1,25 +1,25 @@
 Threads,Backend,Protocol,Operation,RPS,TimePerReq(ms),MaxMemory(MB),CPU(%)
-1,TQMemory,memc-bin,SET,87390.83,0.0114,1021,97
-1,TQMemory,memc-bin,GET,151905.88,0.0066,1021,97
-1,TQMemory (package),package,SET,207039.14,0.0048,1011,100
-1,TQMemory (package),package,GET,13545721.21,0.0001,1011,100
-1,Memcached,memc-bin,SET,113381.91,0.0088,1073,97
-1,Memcached,memc-bin,GET,179714.61,0.0056,1073,97
-2,TQMemory,memc-bin,SET,152677.40,0.0065,1024,190
-2,TQMemory,memc-bin,GET,247898.28,0.0040,1024,190
-2,TQMemory (package),package,SET,311777.10,0.0032,1014,155
-2,TQMemory (package),package,GET,12667622.73,0.0001,1014,155
-2,Memcached,memc-bin,SET,149401.61,0.0067,1073,150
-2,Memcached,memc-bin,GET,283342.98,0.0035,1073,150
-4,TQMemory,memc-bin,SET,232520.05,0.0043,1024,304
-4,TQMemory,memc-bin,GET,261493.48,0.0038,1024,304
-4,TQMemory (package),package,SET,439093.15,0.0023,1016,231
-4,TQMemory (package),package,GET,15884583.88,0.0001,1016,231
-4,Memcached,memc-bin,SET,160911.54,0.0062,1074,202
-4,Memcached,memc-bin,GET,328777.52,0.0030,1074,202
-8,TQMemory,memc-bin,SET,255381.71,0.0039,1022,415
-8,TQMemory,memc-bin,GET,267445.96,0.0037,1022,415
-8,TQMemory (package),package,SET,590001.37,0.0017,1016,335
-8,TQMemory (package),package,GET,21306724.36,0.0000,1016,335
-8,Memcached,memc-bin,SET,151704.40,0.0066,1073,236
-8,Memcached,memc-bin,GET,307905.04,0.0032,1073,236
+1,TQMemory,memc-bin,SET,85474.47,0.0117,1034,98
+1,TQMemory,memc-bin,GET,138336.33,0.0072,1034,98
+1,TQMemory (package),package,SET,209200.39,0.0048,1025,100
+1,TQMemory (package),package,GET,1888340.61,0.0005,1025,100
+1,Memcached,memc-bin,SET,115828.08,0.0086,1073,97
+1,Memcached,memc-bin,GET,182469.38,0.0055,1073,97
+2,TQMemory,memc-bin,SET,157205.16,0.0064,1035,190
+2,TQMemory,memc-bin,GET,217662.86,0.0046,1035,190
+2,TQMemory (package),package,SET,285253.07,0.0035,1029,159
+2,TQMemory (package),package,GET,1880637.80,0.0005,1029,159
+2,Memcached,memc-bin,SET,136262.38,0.0073,1073,151
+2,Memcached,memc-bin,GET,276622.07,0.0036,1073,151
+4,TQMemory,memc-bin,SET,225336.63,0.0044,1035,319
+4,TQMemory,memc-bin,GET,260937.06,0.0038,1035,319
+4,TQMemory (package),package,SET,403345.04,0.0025,1028,244
+4,TQMemory (package),package,GET,2593642.69,0.0004,1028,244
+4,Memcached,memc-bin,SET,149407.66,0.0067,1074,203
+4,Memcached,memc-bin,GET,281263.87,0.0036,1074,203
+8,TQMemory,memc-bin,SET,265620.20,0.0038,1033,410
+8,TQMemory,memc-bin,GET,251397.52,0.0040,1033,410
+8,TQMemory (package),package,SET,611083.18,0.0016,1028,346
+8,TQMemory (package),package,GET,3909499.77,0.0003,1028,346
+8,Memcached,memc-bin,SET,151566.63,0.0066,1074,237
+8,Memcached,memc-bin,GET,306903.95,0.0033,1074,237

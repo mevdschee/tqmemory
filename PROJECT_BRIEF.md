@@ -42,26 +42,26 @@ Uses a **sharded, worker-based architecture** with optimized read path:
 | Component        | Description                                      |
 | ---------------- | ------------------------------------------------ |
 | **ShardedCache** | Routes keys to workers via inline FNV-1a hash    |
-| **Worker**       | Owns shard data, handles writes via channel      |
-| **Index**        | RWMutex-protected map for O(1) key lookup        |
+| **Worker**       | Owns shard data, handles all ops via channel     |
+| **Index**        | Simple map for O(1) key lookup (no locks needed) |
 | **ExpiryHeap**   | Min-heap for efficient TTL management            |
 | **LRU List**     | Doubly linked list for eviction ordering         |
 
 **How it works**:
 
 1. Each worker owns a shard of data (divided by key hash)
-2. **GET operations**: Direct map access with RLock (concurrent reads)
-3. **SET/DELETE operations**: Sent via buffered channel to worker goroutine
-4. LRU touches are batched and processed every 100ms
+2. **All operations**: Sent via buffered channel to worker goroutine
+3. Single worker goroutine processes all requests for its shard
+4. No locks needed - each shard has exclusive single-threaded access
 5. GOMAXPROCS = `max(min(cpu_count, workers), 1)` for optimal parallelism
 
 **Benefits**:
 
-- **Fast reads**: Direct map access with RLock, no channel overhead for GETs
-- **Write serialization**: All writes processed by single worker goroutine
+- **Lock-free**: No RWMutex, no lock contention, no synchronization overhead
+- **Write serialization**: All operations processed by single worker goroutine
 - **Per-worker LRU**: Each shard has independent memory limit and eviction
-- **Batched LRU**: LRU updates processed periodically to reduce overhead
-- **Predictable latency**: Sequential write processing, no lock contention
+- **Simple model**: Single-threaded per shard is easier to reason about
+- **Predictable latency**: Sequential processing, no lock contention
 
 ---
 
