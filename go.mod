@@ -6,7 +6,7 @@ toolchain go1.24.12
 
 require (
 	github.com/bradfitz/gomemcache v0.0.0-20250403215159-8d39553ac7cf
-	github.com/maypok86/otter/v2 v2.0.0
+	github.com/maypok86/otter/v2 v2.3.0
 	github.com/redis/go-redis/v9 v9.17.2
 )
 
@@ -18,5 +18,3 @@ require (
 	github.com/stretchr/testify v1.11.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/maypok86/otter/v2 => ./otter

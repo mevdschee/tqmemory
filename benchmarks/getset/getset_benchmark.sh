@@ -45,7 +45,7 @@ go build -o benchmark-tool .
 # Benchmark Configuration
 CLIENTS=10
 REQUESTS=100000
-SIZE=64   # 10KB - typical SQL query result size
+SIZE=10240   # 10KB - typical SQL query result size
 KEYS=100000
 MEMORY=2048  # Max memory in MB
 
