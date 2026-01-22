@@ -204,3 +204,70 @@ Tested using the Gain framework for io_uring networking. Results:
 - Small values (100 bytes): ~37K RPS - similar to standard
 - Large values (10KB+): Stalls due to buffering issues in Gain framework
 - Standard Go networking is already highly optimized for this workload
+
+---
+
+## Network Performance Experiments (January 2026)
+
+Extensive testing to understand network bottlenecks and optimize throughput.
+
+### Baseline Measurements
+
+| Test | GET RPS | Notes |
+|------|---------|-------|
+| Package mode (no network) | 3.76M | Channel architecture ceiling |
+| Network mode (10 clients) | 236K | TCP overhead dominant |
+| Network mode (100 clients) | 244K | Similar - syscall bound |
+
+CPU profiling of network mode showed **80% of CPU time in syscalls** (`read`/`write`), confirming network I/O as the bottleneck.
+
+### Alternative Cache Backends
+
+| Backend | Package Mode | Network Mode | Notes |
+|---------|--------------|--------------|-------|
+| TQMemory (channels) | 3.76M | 236K | Current implementation |
+| sync.Map | 298M | - | No LRU, unsafe for production |
+| BigCache | 19.1M | 299K | 5x faster package, 27% faster network |
+
+BigCache uses sharded RWMutex instead of channels, reducing lock contention for reads.
+
+### Alternative Network Libraries
+
+| Library | 10 clients | 100 clients | Notes |
+|---------|------------|-------------|-------|
+| Standard net | 236K | 244K | Goroutine per connection |
+| gnet (event-loop) | 76K | 152K | 40% slower than std net |
+| gaio (io_uring) | 70K | 130K | Go bindings add overhead |
+
+Go's goroutine-per-connection model outperforms event-loop alternatives for this workload.
+
+### Scatter-Gather I/O (writev)
+
+Tested `net.Buffers` to send header+extras+value in single syscall:
+- Result: **233K RPS** (same as baseline 235K)
+- No improvement because Go's `bufio.Writer` already coalesces writes
+
+### Maximum Network Ceiling (Dummy Server)
+
+Removed cache entirely to measure pure network overhead:
+
+| Server | GET RPS | Notes |
+|--------|---------|-------|
+| Go dummy | 300K | No cache access |
+| Rust (tokio) | 316K | +5% vs Go |
+| TQMemory | 236K | Cache adds ~20% overhead |
+
+**Key finding**: Rust provides only 5% improvement over Go for pure network throughput.
+
+### Network Optimization Conclusions
+
+1. **Network syscalls dominate** (~80% of CPU time)
+2. **Go's net package is near-optimal** - event-loop alternatives are slower
+3. **Cache overhead is ~20%** (300K ceiling → 236K actual)
+4. **Language choice matters little** - Rust only 5% faster than Go
+5. **The ~240K RPS ceiling is fundamental** to synchronous TCP request-response
+
+Further gains would require:
+- Client-side pipelining (batch requests)
+- Protocol changes (UDP, custom framing)
+- Kernel bypass (DPDK, AF_XDP)
