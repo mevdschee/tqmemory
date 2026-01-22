@@ -82,8 +82,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 		atomic.AddInt32(&s.currConns, -1)
 	}()
 
-	// Peek first byte to determine protocol
-	reader := bufio.NewReader(conn)
+	// Enable TCP_NODELAY to disable Nagle's algorithm for lower latency
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		tcpConn.SetNoDelay(true)
+	}
+
+	// Use 64KB read buffer to match write buffer
+	reader := bufio.NewReaderSize(conn, 65536)
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 
 	firstByte, err := reader.Peek(1)
