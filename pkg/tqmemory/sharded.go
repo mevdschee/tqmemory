@@ -49,7 +49,7 @@ func NewSharded(cfg Config, workerCount int) (*ShardedCache, error) {
 
 	// Create a worker for each shard
 	for i := 0; i < workerCount; i++ {
-		worker := NewWorker(cfg.DefaultTTL, cfg.ChannelCapacity, maxMemoryPerWorker)
+		worker := NewWorker(cfg.DefaultTTL, cfg.ChannelCapacity, maxMemoryPerWorker, cfg.StaleMultiplier)
 		worker.Start()
 		sc.workers[i] = worker
 	}
@@ -95,12 +95,13 @@ func (sc *ShardedCache) sendRequest(workerIdx int, req *Request) *Response {
 }
 
 // Get retrieves a value from the cache.
-func (sc *ShardedCache) Get(key string) ([]byte, uint64, error) {
+// Returns stale=true if value is past soft-expiry but before hard-expiry.
+func (sc *ShardedCache) Get(key string) ([]byte, uint64, bool, error) {
 	resp := sc.sendRequest(sc.workerFor(key), &Request{
 		Op:  OpGet,
 		Key: key,
 	})
-	return resp.Value, resp.Cas, resp.Err
+	return resp.Value, resp.Cas, resp.Stale, resp.Err
 }
 
 // Set stores a value in the cache.

@@ -255,7 +255,7 @@ func (s *Server) handleBinaryStorage(writer *bufio.Writer, req binaryHeader, ext
 }
 
 func (s *Server) handleBinaryGet(writer *bufio.Writer, req binaryHeader, key string, quiet bool) {
-	val, cas, err := s.cache.Get(key)
+	val, cas, stale, err := s.cache.Get(key)
 	if err != nil {
 		if quiet {
 			return
@@ -264,15 +264,19 @@ func (s *Server) handleBinaryGet(writer *bufio.Writer, req binaryHeader, key str
 		return
 	}
 
-	// Use pooled extras buffer
+	// Use pooled extras buffer, set flags[0]=1 if stale
 	extras := extrasPool.Get().([]byte)
-	extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 0 // Reset flags
+	if stale {
+		extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 1 // flags=1 for stale
+	} else {
+		extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 0 // flags=0 for fresh
+	}
 	s.sendBinaryResponse(writer, req, resSuccess, extras, nil, val, cas)
 	extrasPool.Put(extras)
 }
 
 func (s *Server) handleBinaryGetK(writer *bufio.Writer, req binaryHeader, key string, quiet bool) {
-	val, cas, err := s.cache.Get(key)
+	val, cas, stale, err := s.cache.Get(key)
 	if err != nil {
 		if quiet {
 			return
@@ -280,9 +284,13 @@ func (s *Server) handleBinaryGetK(writer *bufio.Writer, req binaryHeader, key st
 		s.sendBinaryResponse(writer, req, resKeyNotFound, nil, nil, nil, 0)
 		return
 	}
-	// Use pooled extras buffer
+	// Use pooled extras buffer, set flags[3]=1 if stale
 	extras := extrasPool.Get().([]byte)
-	extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 0
+	if stale {
+		extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 1
+	} else {
+		extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 0
+	}
 	s.sendBinaryResponse(writer, req, resSuccess, extras, []byte(key), val, cas)
 	extrasPool.Put(extras)
 }
@@ -447,7 +455,7 @@ func (s *Server) handleBinaryGATCommon(writer *bufio.Writer, req binaryHeader, e
 		return
 	}
 
-	val, _, err := s.cache.Get(key)
+	val, _, _, err := s.cache.Get(key)
 	if err != nil {
 		s.sendBinaryResponse(writer, req, resKeyNotFound, nil, nil, nil, 0)
 		return

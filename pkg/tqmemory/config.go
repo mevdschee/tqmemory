@@ -20,6 +20,7 @@ type Config struct {
 	MaxValueSize    int           // Maximum value size (1MB)
 	MaxMemory       int64         // Maximum memory in bytes (0 = unlimited)
 	ChannelCapacity int           // Request channel capacity per worker
+	StaleMultiplier float64       // Hard expiry = TTL * StaleMultiplier (default 2.0, 0 = disabled)
 }
 
 // DefaultConfig returns memcached-compatible defaults
@@ -30,5 +31,6 @@ func DefaultConfig() Config {
 		MaxValueSize:    DefaultMaxValueSize,
 		MaxMemory:       DefaultMaxMemory,
 		ChannelCapacity: DefaultChannelCapacity,
+		StaleMultiplier: 2.0,
 	}
 }

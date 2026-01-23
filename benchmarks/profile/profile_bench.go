@@ -74,7 +74,7 @@ func main() {
 					return
 				default:
 					key := keyList[keyNum%numKeys]
-					_, _, _ = cache.Get(key)
+					_, _, _, _ = cache.Get(key)
 					localGets++
 					keyNum++
 				}

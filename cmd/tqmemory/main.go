@@ -33,6 +33,7 @@ func main() {
 	flag.IntVar(threads, "threads", 4, "Number of threads")
 
 	// TQMemory-specific options (not in memcached)
+	staleMultiplier := flag.Float64("stale", 2.0, "Stale multiplier (hard TTL = soft TTL × this, 0 to disable)")
 	configFile := flag.String("config", "", "Path to config file")
 	pprofEnabled := flag.Bool("pprof", false, "Enable pprof profiling server on :6062")
 
@@ -47,6 +48,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  -c, -connections <num>   Max simultaneous connections (default: 1024)\n")
 		fmt.Fprintf(os.Stderr, "  -t, -threads <num>       Number of threads (default: 4)\n")
 		fmt.Fprintf(os.Stderr, "\nTQMemory options:\n")
+		fmt.Fprintf(os.Stderr, "  -stale <num>             Stale multiplier (default: 2.0, 0 to disable)\n")
 		fmt.Fprintf(os.Stderr, "  -config <file>           Path to config file\n")
 		fmt.Fprintf(os.Stderr, "  -pprof                   Enable pprof profiling server on :6062\n")
 	}
@@ -74,6 +76,8 @@ func main() {
 		threadCount = fileCfg.Threads
 		maxConnections = fileCfg.Connections
 		log.Printf("Loaded config from %s", *configFile)
+		// Apply stale multiplier from config file
+		cfg.StaleMultiplier = fileCfg.StaleMultiplier
 	} else {
 		// Use command-line flags
 		if *socketPath != "" {
@@ -85,6 +89,7 @@ func main() {
 		}
 		cfg = tqmemory.DefaultConfig()
 		cfg.MaxMemory = int64(*memory) * 1024 * 1024
+		cfg.StaleMultiplier = *staleMultiplier
 		threadCount = *threads
 		maxConnections = *connections
 	}

@@ -35,7 +35,7 @@ func TestSetGet(t *testing.T) {
 	}
 
 	// Get the key
-	val, getCas, err := c.Get("key1")
+	val, getCas, _, err := c.Get("key1")
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestSetGet(t *testing.T) {
 	}
 
 	// Verify new value
-	val, _, _ = c.Get("key1")
+	val, _, _, _ = c.Get("key1")
 	if string(val) != "value2" {
 		t.Errorf("Expected 'value2', got '%s'", val)
 	}
@@ -76,7 +76,7 @@ func TestAdd(t *testing.T) {
 	}
 
 	// Verify value
-	val, _, err := c.Get("key1")
+	val, _, _, err := c.Get("key1")
 	if err != nil || string(val) != "value1" {
 		t.Errorf("Get after Add failed: val=%s, err=%v", val, err)
 	}
@@ -88,7 +88,7 @@ func TestAdd(t *testing.T) {
 	}
 
 	// Verify original value unchanged
-	val, _, _ = c.Get("key1")
+	val, _, _, _ = c.Get("key1")
 	if string(val) != "value1" {
 		t.Errorf("Value changed after failed Add: %s", val)
 	}
@@ -117,7 +117,7 @@ func TestReplace(t *testing.T) {
 	}
 
 	// Verify value changed
-	val, _, _ := c.Get("key1")
+	val, _, _, _ := c.Get("key1")
 	if string(val) != "replaced" {
 		t.Errorf("Expected 'replaced', got '%s'", val)
 	}
@@ -143,7 +143,7 @@ func TestCas(t *testing.T) {
 	}
 
 	// Verify value unchanged
-	val, _, _ := c.Get("key1")
+	val, _, _, _ := c.Get("key1")
 	if string(val) != "original" {
 		t.Errorf("Value changed after failed CAS: %s", val)
 	}
@@ -158,7 +158,7 @@ func TestCas(t *testing.T) {
 	}
 
 	// Verify value changed
-	val, _, _ = c.Get("key1")
+	val, _, _, _ = c.Get("key1")
 	if string(val) != "updated" {
 		t.Errorf("Expected 'updated', got '%s'", val)
 	}
@@ -186,7 +186,7 @@ func TestCasConcurrency(t *testing.T) {
 			// Each goroutine tries to increment until it succeeds
 			for {
 				// Get current value and CAS token
-				val, cas, err := c.Get(key)
+				val, cas, _, err := c.Get(key)
 				if err != nil {
 					continue
 				}
@@ -211,7 +211,7 @@ func TestCasConcurrency(t *testing.T) {
 	wg.Wait()
 
 	// Verify final counter value equals number of goroutines
-	val, _, _ := c.Get(key)
+	val, _, _, _ := c.Get(key)
 	finalValue := 0
 	fmt.Sscanf(string(val), "%d", &finalValue)
 
@@ -246,7 +246,7 @@ func TestDelete(t *testing.T) {
 	}
 
 	// Get should fail with ErrKeyNotFound
-	_, _, err = c.Get("key1")
+	_, _, _, err = c.Get("key1")
 	if err != ErrKeyNotFound {
 		t.Errorf("Expected ErrKeyNotFound after Delete, got %v", err)
 	}
@@ -281,7 +281,7 @@ func TestTouch(t *testing.T) {
 	}
 
 	// Verify value still accessible
-	val, _, err := c.Get("key1")
+	val, _, _, err := c.Get("key1")
 	if err != nil || string(val) != "value" {
 		t.Errorf("Get after Touch failed")
 	}
@@ -297,7 +297,7 @@ func TestFlushAll(t *testing.T) {
 	c.Set("key3", []byte("value3"), 0)
 
 	// Verify they exist
-	_, _, err := c.Get("key1")
+	_, _, _, err := c.Get("key1")
 	if err != nil {
 		t.Fatal("Key1 should exist before flush")
 	}
@@ -306,15 +306,15 @@ func TestFlushAll(t *testing.T) {
 	c.FlushAll()
 
 	// All keys should be gone (ErrKeyNotFound)
-	_, _, err = c.Get("key1")
+	_, _, _, err = c.Get("key1")
 	if err != ErrKeyNotFound {
 		t.Errorf("Expected ErrKeyNotFound after FlushAll, got %v", err)
 	}
-	_, _, err = c.Get("key2")
+	_, _, _, err = c.Get("key2")
 	if err != ErrKeyNotFound {
 		t.Errorf("Expected ErrKeyNotFound after FlushAll, got %v", err)
 	}
-	_, _, err = c.Get("key3")
+	_, _, _, err = c.Get("key3")
 	if err != ErrKeyNotFound {
 		t.Errorf("Expected ErrKeyNotFound after FlushAll, got %v", err)
 	}
@@ -346,7 +346,7 @@ func TestIncrement(t *testing.T) {
 	}
 
 	// Verify stored value
-	val, _, _ := c.Get("counter")
+	val, _, _, _ := c.Get("counter")
 	if string(val) != "15" {
 		t.Errorf("Expected '15', got '%s'", val)
 	}
@@ -381,7 +381,7 @@ func TestDecrement(t *testing.T) {
 	}
 
 	// Verify stored value
-	val, _, _ := c.Get("counter")
+	val, _, _, _ := c.Get("counter")
 	if string(val) != "0" {
 		t.Errorf("Expected '0', got '%s'", val)
 	}
@@ -410,7 +410,7 @@ func TestAppend(t *testing.T) {
 	}
 
 	// Verify
-	val, _, _ := c.Get("key1")
+	val, _, _, _ := c.Get("key1")
 	if string(val) != "hello world" {
 		t.Errorf("Expected 'hello world', got '%s'", val)
 	}
@@ -439,7 +439,7 @@ func TestPrepend(t *testing.T) {
 	}
 
 	// Verify
-	val, _, _ := c.Get("key1")
+	val, _, _, _ := c.Get("key1")
 	if string(val) != "hello world" {
 		t.Errorf("Expected 'hello world', got '%s'", val)
 	}
@@ -469,7 +469,7 @@ func TestExpiry(t *testing.T) {
 	c, cleanup := setupTestCache(t)
 	defer cleanup()
 
-	// Set a key with short TTL
+	// Set a key with short TTL (200ms soft, 400ms hard with 2.0 multiplier)
 	cas, setErr := c.Set("expiry_key", []byte("expiry_value"), 200*time.Millisecond)
 	if setErr != nil {
 		t.Fatalf("Set failed: %v", setErr)
@@ -478,22 +478,40 @@ func TestExpiry(t *testing.T) {
 		t.Error("Expected non-zero CAS")
 	}
 
-	// Should be accessible immediately
-	val, _, err := c.Get("expiry_key")
+	// Should be accessible immediately and NOT stale
+	val, _, stale, err := c.Get("expiry_key")
 	if err != nil {
 		t.Fatalf("Key should be accessible immediately: err=%v", err)
 	}
 	if string(val) != "expiry_value" {
 		t.Errorf("Expected 'expiry_value', got '%s'", val)
 	}
+	if stale {
+		t.Error("Key should not be stale immediately after set")
+	}
 
-	// Wait for expiry
-	time.Sleep(300 * time.Millisecond)
+	// Wait past soft-expiry (200ms) but before hard-expiry (400ms)
+	time.Sleep(250 * time.Millisecond)
 
-	// Should be gone due to expiry check in Get (ErrKeyNotFound)
-	_, _, err = c.Get("expiry_key")
+	// Should still be accessible but marked as stale
+	val, _, stale, err = c.Get("expiry_key")
+	if err != nil {
+		t.Fatalf("Key should still be accessible after soft-expiry: err=%v", err)
+	}
+	if string(val) != "expiry_value" {
+		t.Errorf("Expected 'expiry_value', got '%s'", val)
+	}
+	if !stale {
+		t.Error("Key should be stale after soft-expiry")
+	}
+
+	// Wait past hard-expiry (400ms total from set)
+	time.Sleep(200 * time.Millisecond)
+
+	// Should be gone after hard-expiry (ErrKeyNotFound)
+	_, _, _, err = c.Get("expiry_key")
 	if err != ErrKeyNotFound {
-		t.Errorf("Expected ErrKeyNotFound after expiry, got %v", err)
+		t.Errorf("Expected ErrKeyNotFound after hard-expiry, got %v", err)
 	}
 }
 
@@ -515,7 +533,7 @@ func TestLargeValue(t *testing.T) {
 		t.Error("Expected non-zero CAS")
 	}
 
-	retrieved, _, err := c.Get("key1k")
+	retrieved, _, _, err := c.Get("key1k")
 	if err != nil {
 		t.Fatalf("Get 1K value failed: %v", err)
 	}
@@ -540,7 +558,7 @@ func TestLargeValue(t *testing.T) {
 		t.Fatalf("Set 10K value failed: %v", err)
 	}
 
-	retrieved, _, err = c.Get("key10k")
+	retrieved, _, _, err = c.Get("key10k")
 	if err != nil {
 		t.Fatalf("Get 10K value failed: %v", err)
 	}
@@ -566,7 +584,7 @@ func TestMultipleKeys(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		key := fmt.Sprintf("key%02d", i)
 		expected := "value" + key
-		val, _, err := c.Get(key)
+		val, _, _, err := c.Get(key)
 		if err != nil {
 			t.Errorf("Get failed for %s: %v", key, err)
 			continue
@@ -599,7 +617,7 @@ func TestOverwrite(t *testing.T) {
 	}
 
 	// Value should be updated
-	val, _, _ := c.Get("overwrite_key")
+	val, _, _, _ := c.Get("overwrite_key")
 	if string(val) != "updated" {
 		t.Errorf("Expected 'updated', got '%s'", val)
 	}
@@ -626,7 +644,7 @@ func TestKeyWithNullBytes(t *testing.T) {
 	}
 
 	// Get should return the same value
-	retrieved, _, err := c.Get(keyWithNulls)
+	retrieved, _, _, err := c.Get(keyWithNulls)
 	if err != nil {
 		t.Fatalf("Get with null byte key failed: %v", err)
 	}
@@ -635,7 +653,7 @@ func TestKeyWithNullBytes(t *testing.T) {
 	}
 
 	// A different key (e.g., 4 nulls) should not match
-	_, _, err = c.Get("\x00\x00\x00\x00")
+	_, _, _, err = c.Get("\x00\x00\x00\x00")
 	if err != ErrKeyNotFound {
 		t.Error("Different null-byte key should not match")
 	}
@@ -653,7 +671,7 @@ func TestValueWithBinaryData(t *testing.T) {
 		t.Fatalf("Set with binary value failed: %v", err)
 	}
 
-	retrieved, _, err := c.Get("binary_key")
+	retrieved, _, _, err := c.Get("binary_key")
 	if err != nil {
 		t.Fatalf("Get with binary value failed: %v", err)
 	}

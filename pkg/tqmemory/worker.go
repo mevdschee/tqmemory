@@ -39,36 +39,39 @@ type Request struct {
 type Response struct {
 	Value []byte
 	Cas   uint64
+	Stale bool // True if value is past soft-expiry but before hard-expiry
 	Err   error
 	Stats map[string]string
 }
 
 // Worker is the single-threaded cache worker
 type Worker struct {
-	index      *Index
-	reqChan    chan *Request
-	stopChan   chan struct{}
-	casCounter uint64
-	DefaultTTL time.Duration
-	maxMemory  int64 // Max memory in bytes (0 = unlimited)
-	usedMemory int64 // Current memory usage
-	evictions  uint64
-	running    bool
-	done       chan struct{}
+	index           *Index
+	reqChan         chan *Request
+	stopChan        chan struct{}
+	casCounter      uint64
+	DefaultTTL      time.Duration
+	staleMultiplier float64 // Hard expiry = TTL * staleMultiplier (0 = disabled)
+	maxMemory       int64   // Max memory in bytes (0 = unlimited)
+	usedMemory      int64   // Current memory usage
+	evictions       uint64
+	running         bool
+	done            chan struct{}
 }
 
 // NewWorker creates a new worker
-func NewWorker(defaultTTL time.Duration, channelCapacity int, maxMemory int64) *Worker {
+func NewWorker(defaultTTL time.Duration, channelCapacity int, maxMemory int64, staleMultiplier float64) *Worker {
 	return &Worker{
-		index:      NewIndex(),
-		reqChan:    make(chan *Request, channelCapacity),
-		stopChan:   make(chan struct{}),
-		casCounter: uint64(time.Now().UnixNano()),
-		DefaultTTL: defaultTTL,
-		maxMemory:  maxMemory,
-		usedMemory: 0,
-		evictions:  0,
-		done:       make(chan struct{}),
+		index:           NewIndex(),
+		reqChan:         make(chan *Request, channelCapacity),
+		stopChan:        make(chan struct{}),
+		casCounter:      uint64(time.Now().UnixNano()),
+		DefaultTTL:      defaultTTL,
+		staleMultiplier: staleMultiplier,
+		maxMemory:       maxMemory,
+		usedMemory:      0,
+		evictions:       0,
+		done:            make(chan struct{}),
 	}
 }
 
@@ -209,17 +212,22 @@ func (w *Worker) handleGet(req *Request) *Response {
 		return &Response{Err: ErrKeyNotFound}
 	}
 
-	// Check expiry
-	if entry.Expiry > 0 && entry.Expiry <= time.Now().UnixMilli() {
+	now := time.Now().UnixMilli()
+
+	// Check hard expiry - if past hard expiry, key is gone
+	if entry.HardExpiry > 0 && entry.HardExpiry <= now {
 		w.usedMemory -= int64(len(entry.Key) + len(entry.Value))
 		w.index.Delete(req.Key)
 		return &Response{Err: ErrKeyNotFound}
 	}
 
+	// Check soft expiry - if past soft expiry but before hard expiry, mark as stale
+	stale := entry.SoftExpiry > 0 && entry.SoftExpiry <= now
+
 	// Update access time for LRU
 	w.index.Touch(entry.Key)
 
-	return &Response{Value: entry.Value, Cas: entry.Cas}
+	return &Response{Value: entry.Value, Cas: entry.Cas, Stale: stale}
 }
 
 func (w *Worker) handleSet(req *Request) *Response {
@@ -228,7 +236,7 @@ func (w *Worker) handleSet(req *Request) *Response {
 
 func (w *Worker) handleAdd(req *Request) *Response {
 	entry, ok := w.index.Get(req.Key)
-	if ok && (entry.Expiry == 0 || entry.Expiry > time.Now().UnixMilli()) {
+	if ok && (entry.HardExpiry == 0 || entry.HardExpiry > time.Now().UnixMilli()) {
 		return &Response{Err: ErrKeyExists}
 	}
 	return w.doSet(req.Key, req.Value, req.TTL, 0, false)
@@ -236,7 +244,7 @@ func (w *Worker) handleAdd(req *Request) *Response {
 
 func (w *Worker) handleReplace(req *Request) *Response {
 	entry, ok := w.index.Get(req.Key)
-	if !ok || (entry.Expiry > 0 && entry.Expiry <= time.Now().UnixMilli()) {
+	if !ok || (entry.HardExpiry > 0 && entry.HardExpiry <= time.Now().UnixMilli()) {
 		return &Response{Err: ErrKeyNotFound}
 	}
 	return w.doSet(req.Key, req.Value, req.TTL, 0, false)
@@ -244,7 +252,7 @@ func (w *Worker) handleReplace(req *Request) *Response {
 
 func (w *Worker) handleCas(req *Request) *Response {
 	entry, ok := w.index.Get(req.Key)
-	if !ok || (entry.Expiry > 0 && entry.Expiry <= time.Now().UnixMilli()) {
+	if !ok || (entry.HardExpiry > 0 && entry.HardExpiry <= time.Now().UnixMilli()) {
 		return &Response{Err: ErrKeyNotFound}
 	}
 	if entry.Cas != req.Cas {
@@ -259,10 +267,19 @@ func (w *Worker) doSet(key string, value []byte, ttl time.Duration, existingCas 
 		ttl = w.DefaultTTL
 	}
 
-	// Calculate expiry
-	var expiry int64
+	// Calculate soft and hard expiry
+	var softExpiry, hardExpiry int64
 	if ttl > 0 {
-		expiry = time.Now().Add(ttl).UnixMilli()
+		now := time.Now()
+		softExpiry = now.Add(ttl).UnixMilli()
+		// If staleMultiplier is set, calculate hard expiry
+		if w.staleMultiplier > 0 {
+			hardTTL := time.Duration(float64(ttl) * w.staleMultiplier)
+			hardExpiry = now.Add(hardTTL).UnixMilli()
+		} else {
+			// No stale window - hard expiry equals soft expiry
+			hardExpiry = softExpiry
+		}
 	}
 
 	// Calculate memory needed for this entry
@@ -290,10 +307,11 @@ func (w *Worker) doSet(key string, value []byte, ttl time.Duration, existingCas 
 
 	// Store in index
 	entry := &IndexEntry{
-		Key:    key,
-		Value:  valueCopy,
-		Expiry: expiry,
-		Cas:    cas,
+		Key:        key,
+		Value:      valueCopy,
+		SoftExpiry: softExpiry,
+		HardExpiry: hardExpiry,
+		Cas:        cas,
 	}
 	w.index.Set(entry)
 
@@ -314,7 +332,7 @@ func (w *Worker) handleDelete(req *Request) *Response {
 
 func (w *Worker) handleTouch(req *Request) *Response {
 	entry, ok := w.index.Get(req.Key)
-	if !ok || (entry.Expiry > 0 && entry.Expiry <= time.Now().UnixMilli()) {
+	if !ok || (entry.HardExpiry > 0 && entry.HardExpiry <= time.Now().UnixMilli()) {
 		return &Response{Err: ErrKeyNotFound}
 	}
 
@@ -324,15 +342,23 @@ func (w *Worker) handleTouch(req *Request) *Response {
 		ttl = w.DefaultTTL
 	}
 
-	var expiry int64
+	var softExpiry, hardExpiry int64
 	if ttl > 0 {
-		expiry = time.Now().Add(ttl).UnixMilli()
+		now := time.Now()
+		softExpiry = now.Add(ttl).UnixMilli()
+		if w.staleMultiplier > 0 {
+			hardTTL := time.Duration(float64(ttl) * w.staleMultiplier)
+			hardExpiry = now.Add(hardTTL).UnixMilli()
+		} else {
+			hardExpiry = softExpiry
+		}
 	}
 
-	// Update CAS
+	// Update CAS and expiry
 	w.casCounter++
 	entry.Cas = w.casCounter
-	entry.Expiry = expiry
+	entry.SoftExpiry = softExpiry
+	entry.HardExpiry = hardExpiry
 	w.index.Set(entry)
 	w.index.Touch(entry.Key)
 
@@ -349,7 +375,7 @@ func (w *Worker) handleDecr(req *Request) *Response {
 
 func (w *Worker) doIncrDecr(key string, delta uint64, incr bool) *Response {
 	entry, ok := w.index.Get(key)
-	if !ok || (entry.Expiry > 0 && entry.Expiry <= time.Now().UnixMilli()) {
+	if !ok || (entry.HardExpiry > 0 && entry.HardExpiry <= time.Now().UnixMilli()) {
 		return &Response{Err: ErrKeyNotFound}
 	}
 
@@ -398,7 +424,7 @@ func (w *Worker) handlePrepend(req *Request) *Response {
 
 func (w *Worker) doAppendPrepend(key string, value []byte, prepend bool) *Response {
 	entry, ok := w.index.Get(key)
-	if !ok || (entry.Expiry > 0 && entry.Expiry <= time.Now().UnixMilli()) {
+	if !ok || (entry.HardExpiry > 0 && entry.HardExpiry <= time.Now().UnixMilli()) {
 		return &Response{Err: ErrKeyNotFound}
 	}
 

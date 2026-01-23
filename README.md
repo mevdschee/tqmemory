@@ -13,6 +13,7 @@ Blog post: https://www.tqdev.com/2026-tqmemory-memcached-alternative
 - **Competitive Performance**: Matches or exceeds Memcached performance
 - **Memcached Compatible**: Supports all Memcached commands, text and binary
 - **Same CLI Flags**: Uses identical command-line options as memcached
+- **Stale Responses**: Built-in thundering herd protection via soft-expiry
 - **Go package**: Can be used as a Go package for in-process caching
 
 ## Requirements
@@ -43,17 +44,26 @@ tqmemory [options]
 
 Uses the same flags as memcached (with long name alternatives):
 
-| Short  | Long           | Default      | Description                              |
-| ------ | -------------- | ------------ | ---------------------------------------- |
-| `-p`   | `-port`        | `11211`      | TCP port to listen on                    |
-| `-s`   | `-socket`      |              | Unix socket path (overrides -p and -l)   |
-| `-l`   | `-listen`      | (all)        | Interface to listen on                   |
-| `-m`   | `-memory`      | `64`         | Max memory in megabytes                  |
-| `-c`   | `-connections` | `1024`       | Max simultaneous connections             |
-| `-t`   | `-threads`     | `4`          | Number of threads                        |
+| Short  | Long           | Default      | Description                                       |
+| ------ | -------------- | ------------ | ------------------------------------------------- |
+| `-p`   | `-port`        | `11211`      | TCP port to listen on                             |
+| `-s`   | `-socket`      |              | Unix socket path (overrides -p and -l)            |
+| `-l`   | `-listen`      | (all)        | Interface to listen on                            |
+| `-m`   | `-memory`      | `64`         | Max memory in megabytes                           |
+| `-c`   | `-connections` | `1024`       | Max simultaneous connections                      |
+| `-t`   | `-threads`     | `4`          | Number of threads                                 |
+|        | `-stale`       | `2.0`        | Stale multiplier (hard TTL = TTL * 2.0)           |
 |        | `-config`      |              | Path to [config file](cmd/tqmemory/tqmemory.conf) |
 
 **Fixed limits:** Max key size is 250 bytes. Max value size is 1MB.
+
+### Thundering Herd Protection
+
+TQMemory supports **stale responses** for thundering herd protection. When a key's TTL
+expires, it remains accessible (marked stale using memcached flags) until `TTL * staleMultiplier`
+where `staleMultiplier` is a configuration option (default: 2.0). It is up to the application
+to implement a single flight refresh mechanism. You may use the atomicity of the add operation
+for this purpose.
 
 ### Examples
 

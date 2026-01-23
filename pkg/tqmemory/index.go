@@ -18,11 +18,12 @@ var (
 
 // IndexEntry represents an entry in the index
 type IndexEntry struct {
-	Key     string
-	Value   []byte // Value stored directly in the entry
-	Expiry  int64  // Unix timestamp in milliseconds, 0 = no expiry
-	Cas     uint64
-	lruElem *list.Element // Direct pointer to LRU element (avoids lruMap lookup)
+	Key        string
+	Value      []byte // Value stored directly in the entry
+	SoftExpiry int64  // Unix timestamp in milliseconds, stale after this (original TTL)
+	HardExpiry int64  // Unix timestamp in milliseconds, deleted after this (TTL * StaleMultiplier)
+	Cas        uint64
+	lruElem    *list.Element // Direct pointer to LRU element (avoids lruMap lookup)
 }
 
 // ExpiryEntry represents an entry in the expiry heap
@@ -129,9 +130,9 @@ func (idx *Index) Set(entry *IndexEntry) {
 	old, existed := idx.data[entry.Key]
 	idx.data[entry.Key] = entry
 
-	// Update expiry heap
-	if entry.Expiry > 0 {
-		idx.expiryHeap.Insert(entry.Key, entry.Expiry)
+	// Update expiry heap (use HardExpiry for removal timing)
+	if entry.HardExpiry > 0 {
+		idx.expiryHeap.Insert(entry.Key, entry.HardExpiry)
 	} else {
 		idx.expiryHeap.Remove(entry.Key)
 	}

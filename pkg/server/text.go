@@ -284,11 +284,16 @@ func (s *Server) handleTextGet(writer *bufio.Writer, parts []string, withCas boo
 	}
 
 	for _, key := range parts[1:] {
-		value, cas, err := s.cache.Get(key)
+		value, cas, stale, err := s.cache.Get(key)
 		if err == nil {
 			writer.WriteString("VALUE ")
 			writer.WriteString(key)
-			writer.WriteString(" 0 ")
+			// Use flags to indicate staleness (0=fresh, 1=stale)
+			if stale {
+				writer.WriteString(" 1 ")
+			} else {
+				writer.WriteString(" 0 ")
+			}
 			writer.WriteString(strconv.Itoa(len(value)))
 			if withCas {
 				writer.WriteString(" ")
@@ -434,7 +439,7 @@ func (s *Server) handleTextGat(writer *bufio.Writer, parts []string, withCas boo
 	// Process each key
 	for _, key := range parts[2:] {
 		// Get the value first (before touching with potentially expired TTL)
-		value, cas, err := s.cache.Get(key)
+		value, cas, stale, err := s.cache.Get(key)
 		if err != nil {
 			continue // Key not found, skip
 		}
@@ -442,10 +447,14 @@ func (s *Server) handleTextGat(writer *bufio.Writer, parts []string, withCas boo
 		// Now touch with new expiry
 		s.cache.Touch(key, ttl)
 
-		// Output the value
+		// Output the value (flags=1 for stale, 0 for fresh)
 		writer.WriteString("VALUE ")
 		writer.WriteString(key)
-		writer.WriteString(" 0 ")
+		if stale {
+			writer.WriteString(" 1 ")
+		} else {
+			writer.WriteString(" 0 ")
+		}
 		writer.WriteString(strconv.Itoa(len(value)))
 		if withCas {
 			writer.WriteString(" ")

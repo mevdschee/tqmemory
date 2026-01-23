@@ -130,7 +130,7 @@ func (p *PackageClient) Set(key string, value []byte) error {
 }
 
 func (p *PackageClient) Get(key string) error {
-	_, _, err := p.cache.Get(key)
+	_, _, _, err := p.cache.Get(key)
 	return err
 }
 

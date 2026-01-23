@@ -71,12 +71,25 @@ Pure in-memory storage with LRU eviction:
 
 ```go
 type IndexEntry struct {
-    Key    string   // Key string
-    Value  []byte   // Value stored directly in entry
-    Expiry int64    // Unix timestamp (ms), 0 = no expiry
-    Cas    uint64   // CAS token for compare-and-swap
+    Key        string   // Key string
+    Value      []byte   // Value stored directly in entry
+    SoftExpiry int64    // Stale after this (original TTL)
+    HardExpiry int64    // Deleted after this (TTL × StaleMultiplier)
+    Cas        uint64   // CAS token for compare-and-swap
 }
 ```
+
+### Thundering Herd Protection
+
+TQMemory supports **soft-expiry** for thundering herd protection via `StaleMultiplier`:
+
+| Time                    | Stale Flag | Result                              |
+|-------------------------|------------|-------------------------------------|
+| `< TTL`                 | `false`    | Fresh value                         |
+| `TTL → TTL×Multiplier`  | `true`     | Stale value (usable, needs refresh) |
+| `> TTL×Multiplier`      | —          | `ErrKeyNotFound`                    |
+
+**Protocol**: Staleness is exposed via the memcached `flags` field (`flags=1` = stale).
 
 ---
 

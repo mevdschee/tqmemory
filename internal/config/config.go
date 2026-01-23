@@ -9,21 +9,23 @@ import (
 // Config represents the application configuration.
 // Uses the same option names as memcached command-line flags.
 type Config struct {
-	Port        int    // -p, -port: TCP port to listen on (default: 11211)
-	Listen      string // -l, -listen: Interface to listen on (default: INADDR_ANY)
-	Memory      int    // -m, -memory: Max memory in megabytes (default: 64)
-	Connections int    // -c, -connections: Max simultaneous connections (default: 1024)
-	Threads     int    // -t, -threads: Number of threads (default: 4)
+	Port            int     // -p, -port: TCP port to listen on (default: 11211)
+	Listen          string  // -l, -listen: Interface to listen on (default: INADDR_ANY)
+	Memory          int     // -m, -memory: Max memory in megabytes (default: 64)
+	Connections     int     // -c, -connections: Max simultaneous connections (default: 1024)
+	Threads         int     // -t, -threads: Number of threads (default: 4)
+	StaleMultiplier float64 // -stale: Stale multiplier for thundering herd protection (default: 2.0)
 }
 
 // DefaultConfig returns memcached-compatible defaults
 func DefaultConfig() *Config {
 	return &Config{
-		Port:        11211,
-		Listen:      "",
-		Memory:      64,
-		Connections: 1024,
-		Threads:     4,
+		Port:            11211,
+		Listen:          "",
+		Memory:          64,
+		Connections:     1024,
+		Threads:         4,
+		StaleMultiplier: 2.0,
 	}
 }
 
@@ -77,6 +79,10 @@ func parse(data string) (*Config, error) {
 		case "threads":
 			if n, err := strconv.Atoi(value); err == nil {
 				cfg.Threads = n
+			}
+		case "stale":
+			if n, err := strconv.ParseFloat(value, 64); err == nil {
+				cfg.StaleMultiplier = n
 			}
 		}
 	}
