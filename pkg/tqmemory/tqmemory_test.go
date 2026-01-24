@@ -527,6 +527,146 @@ func TestExpiry(t *testing.T) {
 	}
 }
 
+func TestSingleFlightRefresh(t *testing.T) {
+	c, cleanup := setupTestCache(t)
+	defer cleanup()
+
+	const numGoroutines = 50
+	const key = "single_flight_key"
+
+	// Set a key with short TTL (100ms soft, 200ms hard with 2.0 multiplier)
+	_, err := c.Set(key, []byte("value"), 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	// Wait past soft-expiry but before hard-expiry
+	time.Sleep(150 * time.Millisecond)
+
+	// Launch goroutines that all try to get the stale key simultaneously
+	var wg sync.WaitGroup
+	refreshCount := int64(0)
+	staleCount := int64(0)
+	freshCount := int64(0)
+	errorCount := int64(0)
+
+	// Use a barrier to ensure all goroutines start at the same time
+	startChan := make(chan struct{})
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Wait for start signal
+			<-startChan
+
+			_, _, flags, err := c.Get(key)
+			if err != nil {
+				atomic.AddInt64(&errorCount, 1)
+				return
+			}
+
+			switch flags {
+			case 0:
+				atomic.AddInt64(&freshCount, 1)
+			case 1:
+				atomic.AddInt64(&staleCount, 1)
+			case 3:
+				atomic.AddInt64(&refreshCount, 1)
+			}
+		}()
+	}
+
+	// Start all goroutines simultaneously
+	close(startChan)
+	wg.Wait()
+
+	// Verify exactly one goroutine got refresh flag
+	if refreshCount != 1 {
+		t.Errorf("Expected exactly 1 refresh (flags=3), got %d", refreshCount)
+	}
+
+	// All other successful goroutines should get stale flag
+	expectedStale := int64(numGoroutines) - refreshCount - errorCount
+	if staleCount != expectedStale {
+		t.Errorf("Expected %d stale (flags=1), got %d", expectedStale, staleCount)
+	}
+
+	// No fresh flags should be returned (we're past soft expiry)
+	if freshCount != 0 {
+		t.Errorf("Expected 0 fresh (flags=0), got %d", freshCount)
+	}
+
+	if errorCount > 0 {
+		t.Errorf("Unexpected errors: %d", errorCount)
+	}
+
+	t.Logf("Single-flight test passed: refresh=%d, stale=%d, fresh=%d, errors=%d",
+		refreshCount, staleCount, freshCount, errorCount)
+}
+
+func TestStaleFlags(t *testing.T) {
+	c, cleanup := setupTestCache(t)
+	defer cleanup()
+
+	const key = "stale_test_key"
+
+	// Test 1: Fresh access should return flags=0
+	_, err := c.Set(key, []byte("fresh_value"), 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	_, _, flags, err := c.Get(key)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if flags != 0 {
+		t.Errorf("Test 1: Expected flags=0 (fresh), got %d", flags)
+	}
+
+	// Test 2: After soft expiry, first access should return flags=3 (refresh)
+	time.Sleep(150 * time.Millisecond)
+	_, _, flags, err = c.Get(key)
+	if err != nil {
+		t.Fatalf("Get failed after soft expiry: %v", err)
+	}
+	if flags != 3 {
+		t.Errorf("Test 2: Expected flags=3 (refresh), got %d", flags)
+	}
+
+	// Test 3: Subsequent stale access should return flags=1
+	_, _, flags, err = c.Get(key)
+	if err != nil {
+		t.Fatalf("Get failed for subsequent stale access: %v", err)
+	}
+	if flags != 1 {
+		t.Errorf("Test 3: Expected flags=1 (stale), got %d", flags)
+	}
+
+	// Test 4: After refresh (re-set), should be fresh again
+	_, err = c.Set(key, []byte("refreshed_value"), 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("Re-set failed: %v", err)
+	}
+	_, _, flags, err = c.Get(key)
+	if err != nil {
+		t.Fatalf("Get failed after refresh: %v", err)
+	}
+	if flags != 0 {
+		t.Errorf("Test 4: Expected flags=0 (fresh) after refresh, got %d", flags)
+	}
+
+	// Test 5: After hard expiry, key should be gone
+	time.Sleep(250 * time.Millisecond)
+	_, _, _, err = c.Get(key)
+	if err != ErrKeyNotFound {
+		t.Errorf("Test 5: Expected ErrKeyNotFound after hard expiry, got %v", err)
+	}
+
+	t.Log("All stale flag tests passed")
+}
+
 func TestLargeValue(t *testing.T) {
 	c, cleanup := setupTestCache(t)
 	defer cleanup()
