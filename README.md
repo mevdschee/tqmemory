@@ -70,7 +70,6 @@ flags field indicates key freshness:
 | `1`   | Stale value (subsequent accesses during stale period)|
 
 The flag value `3` is returned only once per stale period, enabling single-flight refresh.
-Use the atomicity of the `add` operation to coordinate which client performs the refresh.
 
 ### Examples
 
