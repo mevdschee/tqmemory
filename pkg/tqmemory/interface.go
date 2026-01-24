@@ -5,7 +5,7 @@ import "time"
 // CacheInterface defines the interface for ShardedCache.
 // Allows server to work with the cache implementation.
 type CacheInterface interface {
-	Get(key string) (value []byte, cas uint64, stale bool, err error)
+	Get(key string) (value []byte, cas uint64, flags int, err error)
 	Set(key string, value []byte, ttl time.Duration) (uint64, error)
 	Add(key string, value []byte, ttl time.Duration) (uint64, error)
 	Replace(key string, value []byte, ttl time.Duration) (uint64, error)

@@ -83,13 +83,14 @@ type IndexEntry struct {
 
 TQMemory supports **soft-expiry** for thundering herd protection via `StaleMultiplier`:
 
-| Time                    | Stale Flag | Result                              |
-|-------------------------|------------|-------------------------------------|
-| `< TTL`                 | `false`    | Fresh value                         |
-| `TTL → TTL×Multiplier`  | `true`     | Stale value (usable, needs refresh) |
-| `> TTL×Multiplier`      | —          | `ErrKeyNotFound`                    |
+| Time                    | Flags | Result                                          |
+|-------------------------|-------|-------------------------------------------------|
+| `< TTL`                 | `0`   | Fresh value                                     |
+| `TTL → TTL×Multiplier`  | `3`   | Needs refresh (first access only, returned once)|
+| `TTL → TTL×Multiplier`  | `1`   | Stale value (subsequent accesses)               |
+| `> TTL×Multiplier`      | —     | `ErrKeyNotFound`                                |
 
-**Protocol**: Staleness is exposed via the memcached `flags` field (`flags=1` = stale).
+**Protocol**: Flags are exposed via the memcached `flags` field.
 
 ---
 

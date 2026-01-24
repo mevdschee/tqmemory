@@ -478,31 +478,43 @@ func TestExpiry(t *testing.T) {
 		t.Error("Expected non-zero CAS")
 	}
 
-	// Should be accessible immediately and NOT stale
-	val, _, stale, err := c.Get("expiry_key")
+	// Should be accessible immediately with flags=0 (fresh)
+	val, _, flags, err := c.Get("expiry_key")
 	if err != nil {
 		t.Fatalf("Key should be accessible immediately: err=%v", err)
 	}
 	if string(val) != "expiry_value" {
 		t.Errorf("Expected 'expiry_value', got '%s'", val)
 	}
-	if stale {
-		t.Error("Key should not be stale immediately after set")
+	if flags != 0 {
+		t.Errorf("Expected flags=0 (fresh) immediately after set, got %d", flags)
 	}
 
 	// Wait past soft-expiry (200ms) but before hard-expiry (400ms)
 	time.Sleep(250 * time.Millisecond)
 
-	// Should still be accessible but marked as stale
-	val, _, stale, err = c.Get("expiry_key")
+	// First stale access should return flags=3 (refresh)
+	val, _, flags, err = c.Get("expiry_key")
 	if err != nil {
 		t.Fatalf("Key should still be accessible after soft-expiry: err=%v", err)
 	}
 	if string(val) != "expiry_value" {
 		t.Errorf("Expected 'expiry_value', got '%s'", val)
 	}
-	if !stale {
-		t.Error("Key should be stale after soft-expiry")
+	if flags != 3 {
+		t.Errorf("Expected flags=3 (refresh) on first stale access, got %d", flags)
+	}
+
+	// Second stale access should return flags=1 (stale, not refresh)
+	val, _, flags, err = c.Get("expiry_key")
+	if err != nil {
+		t.Fatalf("Key should still be accessible after soft-expiry: err=%v", err)
+	}
+	if string(val) != "expiry_value" {
+		t.Errorf("Expected 'expiry_value', got '%s'", val)
+	}
+	if flags != 1 {
+		t.Errorf("Expected flags=1 (stale) on subsequent access, got %d", flags)
 	}
 
 	// Wait past hard-expiry (400ms total from set)

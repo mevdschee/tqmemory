@@ -60,10 +60,17 @@ Uses the same flags as memcached (with long name alternatives):
 ### Thundering Herd Protection
 
 TQMemory supports **stale responses** for thundering herd protection. When a key's TTL
-expires, it remains accessible (marked stale using memcached flags) until `TTL * staleMultiplier`
-where `staleMultiplier` is a configuration option (default: 2.0). It is up to the application
-to implement a single flight refresh mechanism. You may use the atomicity of the add operation
-for this purpose.
+expires, it remains accessible until `TTL * staleMultiplier` (default: 2.0). The memcached
+flags field indicates key freshness:
+
+| Flags | Meaning                                              |
+|-------|------------------------------------------------------|
+| `0`   | Fresh value                                          |
+| `3`   | Needs refresh (first stale access only)              |
+| `1`   | Stale value (subsequent accesses during stale period)|
+
+The flag value `3` is returned only once per stale period, enabling single-flight refresh.
+Use the atomicity of the `add` operation to coordinate which client performs the refresh.
 
 ### Examples
 

@@ -39,7 +39,7 @@ type Request struct {
 type Response struct {
 	Value []byte
 	Cas   uint64
-	Stale bool // True if value is past soft-expiry but before hard-expiry
+	Flags int // 0=fresh, 1=stale, 2=refresh (once only)
 	Err   error
 	Stats map[string]string
 }
@@ -221,13 +221,26 @@ func (w *Worker) handleGet(req *Request) *Response {
 		return &Response{Err: ErrKeyNotFound}
 	}
 
-	// Check soft expiry - if past soft expiry but before hard expiry, mark as stale
-	stale := entry.SoftExpiry > 0 && entry.SoftExpiry <= now
+	// Determine flags based on soft expiry and refresh state
+	// 0 = fresh, 1 = stale, 3 = refresh (once only)
+	var flags int
+	if entry.SoftExpiry > 0 && entry.SoftExpiry <= now {
+		// Past soft expiry
+		if !entry.Refreshing {
+			// First stale access - return refresh flag and mark as refreshing
+			entry.Refreshing = true
+			flags = 3
+		} else {
+			// Already refreshing - return stale flag
+			flags = 1
+		}
+	}
+	// else: fresh (flags=0, default)
 
 	// Update access time for LRU
 	w.index.Touch(entry.Key)
 
-	return &Response{Value: entry.Value, Cas: entry.Cas, Stale: stale}
+	return &Response{Value: entry.Value, Cas: entry.Cas, Flags: flags}
 }
 
 func (w *Worker) handleSet(req *Request) *Response {

@@ -23,6 +23,7 @@ type IndexEntry struct {
 	SoftExpiry int64  // Unix timestamp in milliseconds, stale after this (original TTL)
 	HardExpiry int64  // Unix timestamp in milliseconds, deleted after this (TTL * StaleMultiplier)
 	Cas        uint64
+	Refreshing bool          // True after first stale access (prevents subsequent refresh flags)
 	lruElem    *list.Element // Direct pointer to LRU element (avoids lruMap lookup)
 }
 

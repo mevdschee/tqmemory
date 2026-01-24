@@ -255,7 +255,7 @@ func (s *Server) handleBinaryStorage(writer *bufio.Writer, req binaryHeader, ext
 }
 
 func (s *Server) handleBinaryGet(writer *bufio.Writer, req binaryHeader, key string, quiet bool) {
-	val, cas, stale, err := s.cache.Get(key)
+	val, cas, flags, err := s.cache.Get(key)
 	if err != nil {
 		if quiet {
 			return
@@ -264,19 +264,15 @@ func (s *Server) handleBinaryGet(writer *bufio.Writer, req binaryHeader, key str
 		return
 	}
 
-	// Use pooled extras buffer, set flags[0]=1 if stale
+	// Use pooled extras buffer, set flags in last byte
 	extras := extrasPool.Get().([]byte)
-	if stale {
-		extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 1 // flags=1 for stale
-	} else {
-		extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 0 // flags=0 for fresh
-	}
+	extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, byte(flags)
 	s.sendBinaryResponse(writer, req, resSuccess, extras, nil, val, cas)
 	extrasPool.Put(extras)
 }
 
 func (s *Server) handleBinaryGetK(writer *bufio.Writer, req binaryHeader, key string, quiet bool) {
-	val, cas, stale, err := s.cache.Get(key)
+	val, cas, flags, err := s.cache.Get(key)
 	if err != nil {
 		if quiet {
 			return
@@ -284,13 +280,9 @@ func (s *Server) handleBinaryGetK(writer *bufio.Writer, req binaryHeader, key st
 		s.sendBinaryResponse(writer, req, resKeyNotFound, nil, nil, nil, 0)
 		return
 	}
-	// Use pooled extras buffer, set flags[3]=1 if stale
+	// Use pooled extras buffer, set flags in last byte
 	extras := extrasPool.Get().([]byte)
-	if stale {
-		extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 1
-	} else {
-		extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, 0
-	}
+	extras[0], extras[1], extras[2], extras[3] = 0, 0, 0, byte(flags)
 	s.sendBinaryResponse(writer, req, resSuccess, extras, []byte(key), val, cas)
 	extrasPool.Put(extras)
 }

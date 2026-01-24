@@ -95,13 +95,13 @@ func (sc *ShardedCache) sendRequest(workerIdx int, req *Request) *Response {
 }
 
 // Get retrieves a value from the cache.
-// Returns stale=true if value is past soft-expiry but before hard-expiry.
-func (sc *ShardedCache) Get(key string) ([]byte, uint64, bool, error) {
+// Returns flags: 0=fresh, 1=stale, 3=refresh (once only).
+func (sc *ShardedCache) Get(key string) ([]byte, uint64, int, error) {
 	resp := sc.sendRequest(sc.workerFor(key), &Request{
 		Op:  OpGet,
 		Key: key,
 	})
-	return resp.Value, resp.Cas, resp.Stale, resp.Err
+	return resp.Value, resp.Cas, resp.Flags, resp.Err
 }
 
 // Set stores a value in the cache.
